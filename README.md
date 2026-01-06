@@ -1,6 +1,9 @@
 # 💰 Kas IFB24
 
-Platform pencatatan dan monitoring kas kelas yang akurat, transparan, dan dapat diakses oleh seluruh anggota kelas IFB24.
+Platform pencatatan dan monitoring kas kelas yang akurat, transparan, dan dapat diakses oleh seluruh anggota kelas IFB24
+
+🔗 **Live Demo:** [https://kas-ifb24.gt.tc/](https://kas-ifb24.gt.tc)
+
 
 ![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?style=flat&logo=laravel&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)
