@@ -2,13 +2,16 @@
 
 Platform pencatatan dan monitoring kas kelas yang akurat, transparan, dan dapat diakses oleh seluruh anggota kelas IFB24
 
-🔗 **Live Demo:** [https://kas-ifb24.gt.tc/](https://kas-ifb24.gt.tc)
-
 
 ![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?style=flat&logo=laravel&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat&logo=typescript&logoColor=white)
 ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4.x-06B6D4?style=flat&logo=tailwindcss&logoColor=white)
+
+
+
+
+🔗 **Live Demo:** [https://kas-ifb24.gt.tc/](https://kas-ifb24.gt.tc)
 
 ## 📋 Fitur
 
