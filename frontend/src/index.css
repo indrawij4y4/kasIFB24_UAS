@@ -1,0 +1,90 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 23% 7%;
+    /* #0D1117 Main Background */
+    --foreground: 213 27% 93%;
+    /* #E6EDF3 Primary Text */
+
+    --card: 215 19% 13%;
+    /* #1C2128 Card Background */
+    --card-foreground: 213 27% 93%;
+    /* #E6EDF3 */
+
+    --popover: 215 19% 13%;
+    --popover-foreground: 213 27% 93%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 161.4 93.5% 30.4%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 215 21% 11%;
+    /* #161B22 Sidebar/Muted Background */
+    --muted-foreground: 212 9% 58%;
+    /* #8B949E Secondary Text */
+
+    --accent: 262.1 83.3% 57.8%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 215 21% 11%;
+    /* Match muted/sidebar for subtle borders */
+    --input: 215 21% 11%;
+    --ring: 224.3 76.3% 48%;
+
+    --radius: 1rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .gradient-card {
+    background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+    box-shadow: 0 10px 15px -3px rgba(30, 58, 138, 0.1), 0 4px 6px -2px rgba(30, 58, 138, 0.05);
+  }
+
+  .glass-panel {
+    @apply bg-white bg-opacity-70 backdrop-blur-lg border border-white/20;
+  }
+}
+
+/* Animations */
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-10px);
+  }
+
+  40%,
+  80% {
+    transform: translateX(10px);
+  }
+}
+
+.animate-shake {
+  animation: shake 0.4s cubic-bezier(.36, .07, .19, .97) both;
+}
