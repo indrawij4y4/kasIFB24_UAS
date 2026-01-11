@@ -17,5 +17,6 @@
         "APP_DEBUG": "false",
         "APP_URL": "https://${VERCEL_URL}",
         "VITE_APP_URL": "https://${VERCEL_URL}"
-    }
+    },
+    "outputDirectory": "public"
 }
