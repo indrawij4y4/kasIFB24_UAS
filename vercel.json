@@ -19,8 +19,8 @@
         "VERCEL": "1",
         "APP_ENV": "production",
         "APP_DEBUG": "true",
-        "APP_URL": "https://${VERCEL_URL}",
-        "VITE_APP_URL": "https://${VERCEL_URL}",
+        "APP_URL": "https://kas-ifb-24-uas.vercel.app",
+        "VITE_APP_URL": "https://kas-ifb-24-uas.vercel.app",
         "LOG_CHANNEL": "stderr",
         "SESSION_DRIVER": "cookie",
         "CACHE_DRIVER": "array"
