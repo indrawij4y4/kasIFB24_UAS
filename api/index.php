@@ -43,6 +43,17 @@ if (getenv('VERCEL') || isset($_ENV['VERCEL'])) {
     $_ENV['APP_CONFIG_CACHE'] = $tmpBase . '/bootstrap/cache/config.php';
     $_ENV['APP_ROUTES_CACHE'] = $tmpBase . '/bootstrap/cache/routes.php';
     $_ENV['APP_EVENTS_CACHE'] = $tmpBase . '/bootstrap/cache/events.php';
+
+    // FIX: Vercel's vercel-php sets PATH_INFO to exclude /api prefix
+    // Laravel uses REQUEST_URI for routing, but we need to ensure it's correct
+    // The SCRIPT_NAME is /api/index.php, but we want Laravel to see the full path
+    if (isset($_SERVER['PATH_INFO']) && !str_starts_with($_SERVER['PATH_INFO'], '/api')) {
+        // If PATH_INFO doesn't start with /api, prepend it
+        $_SERVER['PATH_INFO'] = '/api' . $_SERVER['PATH_INFO'];
+    }
+
+    // Also fix SCRIPT_NAME to be just /index.php for proper URL generation
+    $_SERVER['SCRIPT_NAME'] = '/index.php';
 }
 
 // Wrap everything in try-catch to capture any errors
