@@ -1,15 +1,13 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../auth/AuthContext";
 import { api, pemasukanApi } from "../../services/api";
-import { Loader2, AlertCircle, Plus, UserPlus, Receipt, Settings, Wallet, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Loader2, AlertCircle, Plus, UserPlus, Receipt, Wallet, ArrowUpCircle, ArrowDownCircle, CheckCircle2, XCircle, Clock } from "lucide-react";
 
 import { useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { cn, getWeeksInMonth } from "../../lib/utils";
-import { Modal } from "../../components/ui/Modal";
-import { Input } from "../../components/ui/Input";
-import { Select } from "../../components/ui/Select";
+import { cn } from "../../lib/utils";
+import { REALTIME_INTERVAL } from "../../config";
 
 // Styled Components
 function StatCard({
@@ -124,129 +122,8 @@ function PaymentStatusCard({ unpaidWeeks, weeklyFee }: { unpaidWeeks: number; we
 }
 
 
-
-function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-    const queryClient = useQueryClient();
-    const [weeklyFee, setWeeklyFee] = useState('');
-    const [selectedMonth, setSelectedMonth] = useState((new Date().getMonth() + 1).toString());
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
-
-    // Fetch settings for specific period
-    const { data: settings } = useQuery({
-        queryKey: ['settings', selectedMonth, selectedYear],
-        queryFn: () => api.getSettings(parseInt(selectedMonth), parseInt(selectedYear)),
-        staleTime: 5 * 60 * 1000,
-    });
-
-    useEffect(() => {
-        if (settings) {
-            setWeeklyFee(settings.weeklyFee.toString());
-        }
-    }, [settings]);
-
-    const mutation = useMutation({
-        mutationFn: api.updateSettings,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['settings'] }); // Invalidate all settings queries
-            onClose();
-        }
-    });
-
-    // Auto-calculate weeks for selected period
-    const weeksInSelectedMonth = getWeeksInMonth(parseInt(selectedYear), parseInt(selectedMonth) - 1);
-
-    const handleSave = () => {
-        mutation.mutate({
-            weeklyFee: parseInt(weeklyFee),
-            weeksPerMonth: weeksInSelectedMonth,
-            month: parseInt(selectedMonth),
-            year: parseInt(selectedYear)
-        });
-    };
-
-    const months = [
-        { label: 'Januari', value: '1' }, { label: 'Februari', value: '2' },
-        { label: 'Maret', value: '3' }, { label: 'April', value: '4' },
-        { label: 'Mei', value: '5' }, { label: 'Juni', value: '6' },
-        { label: 'Juli', value: '7' }, { label: 'Agustus', value: '8' },
-        { label: 'September', value: '9' }, { label: 'Oktober', value: '10' },
-        { label: 'November', value: '11' }, { label: 'Desember', value: '12' },
-    ];
-
-    const years = [
-        { label: '2024', value: '2024' },
-        { label: '2025', value: '2025' },
-        { label: '2026', value: '2026' },
-    ];
-
-    return (
-        <Modal
-            isOpen={isOpen}
-            onClose={onClose}
-            onConfirm={handleSave}
-            title="Pengaturan Kas"
-            description="Atur nominal iuran wajib untuk periode tertentu."
-            type="confirm"
-            confirmLabel={mutation.isPending ? "Menyimpan..." : "Simpan Perubahan"}
-        >
-            <div className="space-y-4 pt-4 text-left">
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase ml-1 mb-2 block">Bulan</label>
-                        <div className="flex overflow-x-auto pb-4 gap-2 scrollbar-hide -mx-2 px-2 snap-x">
-                            {months.map((m) => (
-                                <button
-                                    key={m.value}
-                                    onClick={() => setSelectedMonth(m.value)}
-                                    className={cn(
-                                        "flex-shrink-0 px-4 py-2 rounded-xl text-sm font-bold transition-all border snap-center",
-                                        selectedMonth === m.value
-                                            ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-blue-500/30 scale-105"
-                                            : "bg-card text-muted-foreground border-border hover:border-foreground/20 hover:bg-muted"
-                                    )}
-                                >
-                                    {m.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    <Select
-                        label="Tahun"
-                        value={selectedYear}
-                        onChange={(e) => setSelectedYear(e.target.value)}
-                        options={years}
-                    />
-                </div>
-
-                <div className="w-full h-px bg-slate-100 my-2"></div>
-
-                <Input
-                    label="Biaya Mingguan"
-                    type="number"
-                    value={weeklyFee}
-                    onChange={(e) => setWeeklyFee(e.target.value)}
-                    placeholder="Contoh: 10000"
-                />
-
-                <div className="bg-muted/50 p-4 rounded-xl border border-border">
-                    <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground font-medium">Jumlah Minggu:</span>
-                        <span className="font-bold text-primary">{weeksInSelectedMonth} Minggu</span>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
-                        * Penting: Pengaturan ini hanya berlaku untuk bulan <strong>{months[parseInt(selectedMonth) - 1].label} {selectedYear}</strong>.
-                        Bulan lain tidak akan terpengaruh.
-                    </p>
-                </div>
-            </div>
-        </Modal>
-    );
-}
-
 function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const navigate = useNavigate();
-    const [showSettings, setShowSettings] = useState(false);
 
     return (
         <AnimatePresence>
@@ -266,34 +143,32 @@ function AdminPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => void 
                         className="bg-card w-full rounded-t-[40px] p-8 pb-12 shadow-2xl relative z-10 border-t border-border"
                     >
                         <div className="w-12 h-1.5 bg-muted rounded-full mx-auto mb-8"></div>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-2 gap-4">
                             <button onClick={() => { navigate('/admin/in'); onClose(); }} className="group p-5 bg-emerald-50 dark:bg-emerald-900/20 rounded-[2rem] flex flex-col items-center gap-3 active:scale-95 transition-all hover:bg-emerald-100 dark:hover:bg-emerald-900/40">
                                 <div className="w-12 h-12 bg-background dark:bg-card rounded-2xl flex items-center justify-center text-emerald-500 dark:text-emerald-400 shadow-sm group-hover:scale-110 transition-transform">
                                     <UserPlus className="w-6 h-6" />
                                 </div>
-                                <span className="text-[10px] font-black uppercase text-emerald-800 dark:text-emerald-300 tracking-wider">Iuran</span>
+                                <span className="text-[10px] font-black uppercase text-emerald-800 dark:text-emerald-300 tracking-wider">Input Iuran</span>
                             </button>
-                            <button onClick={() => { navigate('/admin/out'); onClose(); }} className="group p-5 bg-rose-50 dark:bg-rose-900/20 rounded-[2rem] flex flex-col items-center gap-3 active:scale-95 transition-all hover:bg-rose-100 dark:hover:bg-rose-900/40">
+                            <button onClick={() => { navigate('/arrears'); onClose(); }} className="group p-5 bg-blue-50 dark:bg-blue-900/20 rounded-[2rem] flex flex-col items-center gap-3 active:scale-95 transition-all hover:bg-blue-100 dark:hover:bg-blue-900/40">
+                                <div className="w-12 h-12 bg-background dark:bg-card rounded-2xl flex items-center justify-center text-blue-500 dark:text-blue-400 shadow-sm group-hover:scale-110 transition-transform">
+                                    <AlertCircle className="w-6 h-6" />
+                                </div>
+                                <span className="text-[10px] font-black uppercase text-blue-800 dark:text-blue-300 tracking-wider">Quick Iuran</span>
+                            </button>
+                            <button onClick={() => { navigate('/admin/out'); onClose(); }} className="group p-5 bg-rose-50 dark:bg-rose-900/20 rounded-[2rem] flex flex-col items-center gap-3 active:scale-95 transition-all hover:bg-rose-100 dark:hover:bg-rose-900/40 col-span-2">
                                 <div className="w-12 h-12 bg-background dark:bg-card rounded-2xl flex items-center justify-center text-rose-500 dark:text-rose-400 shadow-sm group-hover:scale-110 transition-transform">
                                     <Receipt className="w-6 h-6" />
                                 </div>
                                 <span className="text-[10px] font-black uppercase text-rose-800 dark:text-rose-300 tracking-wider">Belanja</span>
                             </button>
-                            <button onClick={() => { setShowSettings(true); }} className="group p-5 bg-muted rounded-[2rem] flex flex-col items-center gap-3 active:scale-95 transition-all hover:bg-muted/80">
-                                <div className="w-12 h-12 bg-background dark:bg-card rounded-2xl flex items-center justify-center text-muted-foreground shadow-sm group-hover:scale-110 transition-transform">
-                                    <Settings className="w-6 h-6" />
-                                </div>
-                                <span className="text-[10px] font-black uppercase text-foreground tracking-wider">Atur Kas</span>
-                            </button>
                         </div>
                         <button onClick={onClose} className="w-full mt-10 py-4 text-muted-foreground font-bold uppercase text-xs hover:text-foreground transition-colors">Tutup Menu</button>
                     </motion.div>
-
-                    <SettingsModal isOpen={showSettings} onClose={() => { setShowSettings(false); onClose(); }} />
                 </div>
             )}
         </AnimatePresence>
-    )
+    );
 }
 
 export function DashboardScreen() {
@@ -302,10 +177,15 @@ export function DashboardScreen() {
     const [showAdminPanel, setShowAdminPanel] = useState(false);
     const navigate = useNavigate();
 
+    // Auto-refresh interval for realtime updates
+    // Imported from config to ensure consistency across the app
+
+
     const { data, isLoading } = useQuery({
         queryKey: ["dashboardStats"],
         queryFn: api.getStats,
-        staleTime: 5 * 60 * 1000,
+        staleTime: 1000, // Reduced to 1s for snappier feeling
+        refetchInterval: REALTIME_INTERVAL, // 3000ms from config
     });
 
     const currentMonth = new Date().getMonth() + 1;
@@ -314,27 +194,31 @@ export function DashboardScreen() {
     const { data: students } = useQuery({
         queryKey: ["students", currentMonth, currentYear],
         queryFn: () => api.getStudents(currentMonth, currentYear),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 1000,
+        refetchInterval: REALTIME_INTERVAL,
     });
 
     const { data: settings } = useQuery({
         queryKey: ["settings", currentMonth, currentYear],
         queryFn: () => api.getSettings(currentMonth, currentYear),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 30 * 1000, // Settings change less frequently
+        refetchInterval: 30 * 1000, // Refresh settings every 30 seconds
     });
 
     // Fetch recent transactions for history section
     const { data: transactions } = useQuery({
         queryKey: ["recentTransactions"],
         queryFn: () => api.getTransactions(),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 1000,
+        refetchInterval: REALTIME_INTERVAL, // Realtime updates for activities
     });
 
     // Fetch recent income for history section
     const { data: incomeList } = useQuery({
         queryKey: ["recentIncome", currentMonth, currentYear],
         queryFn: () => pemasukanApi.getList(currentMonth, currentYear),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 1000,
+        refetchInterval: REALTIME_INTERVAL, // Realtime updates for activities
     });
 
     // Combine income and expense transactions, sorted by date (newest first)
@@ -346,6 +230,7 @@ export function DashboardScreen() {
             amount: item.nominal,
             type: 'income' as const,
             week: item.minggu_ke,
+            createdAt: item.created_at,
         }));
 
         const expenseItems = (transactions || []).map((t: any) => ({
@@ -354,14 +239,16 @@ export function DashboardScreen() {
             date: t.date,
             amount: t.amount,
             type: 'expense' as const,
+            createdAt: t.createdAt,
         }));
 
-        // Combine and sort by date (newest first)
+        // Combine and sort by createdAt (newest first), falling back to date if missing
         return [...incomeItems, ...expenseItems]
             .sort((a, b) => {
-                const dateA = new Date(a.date).getTime() || 0;
-                const dateB = new Date(b.date).getTime() || 0;
-                return dateB - dateA;
+                // Try to sort by full timestamp first
+                const timeA = new Date(a.createdAt || a.date).getTime();
+                const timeB = new Date(b.createdAt || b.date).getTime();
+                return timeB - timeA;
             })
             .slice(0, 3); // Show only 3 latest
     })();
@@ -426,7 +313,9 @@ export function DashboardScreen() {
 
             {/* Main Stats Grid - Mobile Carousel */}
             {/* Mobile: Horizontal Scroll, Desktop: 3 Columns Grid */}
-            <div className="flex flex-nowrap overflow-x-auto snap-x snap-mandatory gap-4 -mx-4 px-4 pb-4 md:grid md:grid-cols-3 md:gap-6 md:pb-0 md:mx-0 md:px-0 scrollbar-hide mb-8">
+            {/* Main Stats Grid - Mobile Carousel */}
+            {/* Mobile: Horizontal Scroll, Desktop: 3 Columns Grid */}
+            <div className="flex flex-nowrap overflow-x-auto snap-x snap-mandatory gap-4 -mx-4 px-4 pb-4 md:grid md:grid-cols-3 md:gap-6 md:pb-0 md:mx-0 md:px-0 md:overflow-visible scrollbar-hide mb-8">
                 {/* Balance Card */}
                 <div className="min-w-[85vw] md:min-w-0 md:col-span-1 snap-center h-full">
                     <StatCard
@@ -555,7 +444,7 @@ export function DashboardScreen() {
                             return (
                                 <div
                                     key={t.id}
-                                    className="group flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100"
+                                    className="group flex items-center justify-between p-4 rounded-2xl hover:bg-accent/50 dark:hover:bg-accent/20 transition-colors border border-transparent hover:border-border"
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className={cn(

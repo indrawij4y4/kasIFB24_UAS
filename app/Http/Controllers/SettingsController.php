@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Setting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class SettingsController extends Controller
 {
@@ -18,6 +19,7 @@ class SettingsController extends Controller
         return response()->json([
             'weekly_fee' => Setting::getPeriodFee($month, $year),
             'weeks_per_month' => Setting::getPeriodWeeks($month, $year),
+            'is_configured' => $month && $year ? Setting::hasPeriodValue('weekly_fee', $month, $year) : false,
         ]);
     }
 
@@ -52,6 +54,19 @@ class SettingsController extends Controller
             if ($request->has('weeks_per_month')) {
                 Setting::setValue('weeks_per_month', $request->weeks_per_month);
             }
+        }
+
+        // Invalidate Arrears Cache
+        if ($month && $year) {
+            Cache::forget("arrears_list_{$month}_{$year}");
+        } else {
+            $currentYear = now()->year;
+            $nextYear = $currentYear + 1;
+            for ($m = 1; $m <= 12; $m++) {
+                Cache::forget("arrears_list_{$m}_{$currentYear}");
+                Cache::forget("arrears_list_{$m}_{$nextYear}");
+            }
+            Cache::forget('dashboard_stats');
         }
 
         return response()->json([

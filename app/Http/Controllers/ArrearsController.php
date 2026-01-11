@@ -19,8 +19,8 @@ class ArrearsController extends Controller
             'tahun' => 'required|integer|min:2020|max:2099',
         ]);
 
-        $bulan = $request->bulan;
-        $tahun = $request->tahun;
+        $bulan = (int) $request->bulan;
+        $tahun = (int) $request->tahun;
 
         $cacheKey = "arrears_list_{$bulan}_{$tahun}";
 
@@ -57,7 +57,7 @@ class ArrearsController extends Controller
 
                 for ($week = 1; $week <= $weeksPerMonth; $week++) {
                     $payment = $payments->get($week);
-                    if (!$payment || $payment->nominal < $weeklyFee) {
+                    if (!$payment || (float) $payment->nominal < (float) $weeklyFee) {
                         $unpaidWeeks[] = $week;
                     }
                 }

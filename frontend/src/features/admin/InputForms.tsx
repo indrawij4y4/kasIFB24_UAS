@@ -6,11 +6,27 @@ import { Select } from "../../components/ui/Select";
 import { Modal } from "../../components/ui/Modal";
 import { useNavigate } from "react-router-dom";
 import { ChevronLeft, Loader2 } from 'lucide-react';
-import { usersApi, pemasukanApi, pengeluaranApi } from "../../services/api";
+import { usersApi, pemasukanApi, pengeluaranApi, api } from "../../services/api";
+import { getWeeksInMonth } from "../../lib/utils";
+import { REALTIME_INTERVAL } from "../../config";
 
 // Helper to get current month and year
 const getCurrentMonth = () => new Date().getMonth() + 1;
 const getCurrentYear = () => new Date().getFullYear();
+
+// Helper functions for number formatting
+const MAX_AMOUNT = 10000000; // Maximum 10 million
+const MAX_AMOUNT_FORMATTED = '10.000.000';
+
+const formatNumber = (value: string | number): string => {
+    const num = typeof value === 'string' ? value.replace(/\D/g, '') : value.toString();
+    if (!num) return '';
+    return parseInt(num).toLocaleString('id-ID');
+};
+
+const parseNumber = (value: string): string => {
+    return value.replace(/\D/g, '');
+};
 
 // Get current week of the month (1-5)
 const getCurrentWeek = () => {
@@ -31,9 +47,9 @@ export function InputInScreen() {
     // Form state
     const [selectedUser, setSelectedUser] = useState('');
     const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth().toString());
-    const [selectedYear, setSelectedYear] = useState(getCurrentYear().toString());
+    const [selectedYear] = useState(getCurrentYear().toString());
     const [selectedWeek, setSelectedWeek] = useState(getCurrentWeek().toString());
-    const [nominal, setNominal] = useState('10000');
+    const [nominal, setNominal] = useState('');
 
     // Fetch users for dropdown
     const { data: users, isLoading: loadingUsers } = useQuery({
@@ -41,12 +57,66 @@ export function InputInScreen() {
         queryFn: usersApi.getAll,
     });
 
+    // Fetch settings to get weekly fee
+    const { data: settings } = useQuery({
+        queryKey: ['settings', selectedMonth, selectedYear],
+        queryFn: () => api.getSettings(parseInt(selectedMonth), parseInt(selectedYear)),
+        staleTime: 5 * 60 * 1000,
+    });// Fetch matrix data to filter available weeks
+    // We don't strictly need studentsMatrix if we use getStudents (which returns the same structure roughly), 
+    // but preserving for now if needed or removing if completely unused.
+    // The error said `studentsMatrix` is declared but never read.
+
+    const { data: studentsData } = useQuery({
+        queryKey: ['studentsData', selectedMonth, selectedYear],
+        queryFn: () => api.getStudents(parseInt(selectedMonth), parseInt(selectedYear)),
+        enabled: !!selectedUser,
+    });
+
+    // Helper to check if week is paid
+    const isWeekPaid = (week: number) => {
+        if (!studentsData || !selectedUser) return false;
+        const student = studentsData.find((s: any) => s.id.toString() === selectedUser);
+        if (!student) return false;
+
+        // Check m1, m2, m3, m4, m5
+        const key = `m${week}`;
+        return (student[key] || 0) > 0;
+    };
+
+    // Filter available weeks
+    const totalWeeks = getWeeksInMonth(parseInt(selectedYear), parseInt(selectedMonth) - 1);
+
+    // Create array [1, 2, ... totalWeeks]
+    const weekOptions = Array.from({ length: totalWeeks }, (_, i) => i + 1).map(w => ({
+        label: `Minggu ${w}`,
+        value: w.toString(),
+        disabled: isWeekPaid(w)
+    })).filter(opt => !opt.disabled);
+
     // Set default user when users load
     useEffect(() => {
         if (users && users.length > 0 && !selectedUser) {
             setSelectedUser(users[0].id.toString());
         }
     }, [users, selectedUser]);
+
+    // Set default nominal based on weekly fee from settings and reset week if invalid
+    useEffect(() => {
+        // Auto-select first available week if current selection is invalid/paid
+        if (weekOptions.length > 0) {
+            // If selected week is not in options (because it's filtered out), select the first one
+            if (!weekOptions.find(opt => opt.value === selectedWeek)) {
+                setSelectedWeek(weekOptions[0].value);
+            }
+        } else {
+            setSelectedWeek('-');
+        }
+
+        if (settings?.weeklyFee) {
+            setNominal(settings.weeklyFee.toString());
+        }
+    }, [settings?.weeklyFee, selectedMonth, selectedYear, studentsData, selectedUser, weekOptions, selectedWeek]); // Dependencies for nominal and week update
 
     // Mutation for saving pemasukan
     const mutation = useMutation({
@@ -80,6 +150,30 @@ export function InputInScreen() {
             setErrorModal({ open: true, message: 'Lengkapi semua field!' });
             return;
         }
+
+        // If week is empty or '-' (implies all paid)
+        if ((!selectedWeek || selectedWeek === '-') && weekOptions.length === 0) {
+            setErrorModal({ open: true, message: 'Mahasiswa ini sudah lunas untuk bulan ini.' });
+            return;
+        }
+
+        const amount = parseInt(nominal);
+        if (amount > MAX_AMOUNT) {
+            setErrorModal({
+                open: true,
+                message: `Nominal melebihi batas maksimum. Maksimum input yang diizinkan adalah Rp ${MAX_AMOUNT_FORMATTED}. Silakan masukkan nominal yang lebih kecil.`
+            });
+            return;
+        }
+
+        if (amount <= 0) {
+            setErrorModal({
+                open: true,
+                message: 'Nominal harus lebih dari Rp 0. Silakan masukkan nominal yang valid.'
+            });
+            return;
+        }
+
         setModalOpen(true);
     };
 
@@ -118,36 +212,21 @@ export function InputInScreen() {
                             options={months}
                         />
                         <Select
-                            label="Tahun"
-                            value={selectedYear}
-                            onChange={(e) => setSelectedYear(e.target.value)}
-                            options={[
-                                { label: '2024', value: '2024' },
-                                { label: '2025', value: '2025' },
-                                { label: '2026', value: '2026' },
-                            ]}
+                            label="Minggu Ke"
+                            value={selectedWeek}
+                            onChange={(e) => setSelectedWeek(e.target.value)}
+                            options={weekOptions.length > 0 ? weekOptions : [{ label: 'Lunas Semua', value: '-' }]}
+                            disabled={weekOptions.length === 0}
                         />
                     </div>
 
-                    <Select
-                        label="Minggu Ke"
-                        value={selectedWeek}
-                        onChange={(e) => setSelectedWeek(e.target.value)}
-                        options={[
-                            { label: 'Minggu 1', value: '1' },
-                            { label: 'Minggu 2', value: '2' },
-                            { label: 'Minggu 3', value: '3' },
-                            { label: 'Minggu 4', value: '4' },
-                            { label: 'Minggu 5', value: '5' },
-                        ]}
-                    />
-
                     <Input
                         label="Nominal (Rp)"
-                        type="number"
-                        value={nominal}
-                        onChange={(e) => setNominal(e.target.value)}
-                        placeholder="10000"
+                        type="text"
+                        inputMode="numeric"
+                        value={formatNumber(nominal)}
+                        onChange={(e) => setNominal(parseNumber(e.target.value))}
+                        placeholder="10.000"
                     />
 
                     <Button
@@ -207,19 +286,10 @@ export function InputOutScreen() {
     // Fetch current balance for validation
     const { data: stats } = useQuery({
         queryKey: ['dashboardStats'],
-        queryFn: async () => {
-            const response = await fetch('http://127.0.0.1:8000/api/dashboard/stats', {
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-                    'Accept': 'application/json',
-                }
-            });
-            return response.json();
-        },
-    });
-
-    // Mutation for saving pengeluaran
-    const mutation = useMutation({
+        queryFn: api.getStats,
+        staleTime: 60 * 1000,
+        refetchInterval: REALTIME_INTERVAL,
+    }); const mutation = useMutation({
         mutationFn: async () => {
             const formData = new FormData();
             formData.append('judul', judul);
@@ -250,6 +320,22 @@ export function InputOutScreen() {
 
         const amount = parseInt(nominal);
         const currentBalance = stats?.balance || 0;
+
+        if (amount > MAX_AMOUNT) {
+            setErrorModal({
+                open: true,
+                message: `Nominal melebihi batas maksimum. Maksimum input yang diizinkan adalah Rp ${MAX_AMOUNT_FORMATTED}. Silakan masukkan nominal yang lebih kecil.`
+            });
+            return;
+        }
+
+        if (amount <= 0) {
+            setErrorModal({
+                open: true,
+                message: 'Nominal harus lebih dari Rp 0. Silakan masukkan nominal yang valid.'
+            });
+            return;
+        }
 
         if (amount > currentBalance) {
             setErrorModal({
@@ -286,9 +372,11 @@ export function InputOutScreen() {
 
                 <Input
                     label="Nominal (Rp)"
-                    type="number"
-                    value={nominal}
-                    onChange={(e) => setNominal(e.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    value={formatNumber(nominal)}
+                    onChange={(e) => setNominal(parseNumber(e.target.value))}
+                    placeholder="10.000"
                 />
 
                 <Button

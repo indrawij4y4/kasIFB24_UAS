@@ -1,4 +1,4 @@
-import { Home, Grid3x3, ClipboardList, Trophy, Download, LogOut } from "lucide-react";
+import { Home, Grid3x3, ClipboardList, Trophy, LogOut, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../features/auth/AuthContext";
@@ -8,7 +8,7 @@ const navItems = [
     { id: "matrix", label: "Matrix", icon: Grid3x3, path: "/matrix" },
     { id: "report", label: "Laporan", icon: ClipboardList, path: "/report" },
     { id: "leaderboard", label: "Leader", icon: Trophy, path: "/leaderboard" },
-    { id: "export", label: "Export", icon: Download, path: "/export" },
+    { id: "settings", label: "Setting", icon: Settings, path: "/settings" },
 ];
 
 export function Sidebar() {
@@ -25,7 +25,7 @@ export function Sidebar() {
         <aside className="hidden md:flex flex-col w-64 h-screen fixed left-0 top-0 bg-white/80 dark:bg-muted/95 backdrop-blur-xl border-r border-slate-200 dark:border-white/5 z-50 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.1)] transition-colors duration-300">
             <div className="p-6 pt-8 border-b border-slate-100 dark:border-white/5 flex items-center gap-3">
                 <div className="w-12 h-12 bg-white dark:bg-card rounded-xl shadow-sm border border-slate-100 dark:border-white/5 overflow-hidden flex-shrink-0">
-                    <img src="/logo.jpg" alt="Logo IFB24" className="w-full h-full object-cover" />
+                    <img src="./logo.jpg" alt="Logo IFB24" className="w-full h-full object-cover" />
                 </div>
                 <div>
                     <h1 className="text-lg font-black text-primary tracking-tight">

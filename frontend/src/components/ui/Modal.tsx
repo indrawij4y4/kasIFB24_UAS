@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { CheckCircle, HelpCircle, Info, XCircle } from 'lucide-react';
+import * as Lucide from 'lucide-react';
 import { Button } from './Button';
 import { cn } from '../../lib/utils';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -34,11 +34,11 @@ export const Modal: React.FC<ModalProps> = ({
 
     const getIcon = () => {
         switch (type) {
-            case 'success': return <CheckCircle className="w-8 h-8 text-emerald-500" />;
-            case 'error': return <XCircle className="w-8 h-8 text-rose-500" />;
-            case 'confirm': return <HelpCircle className="w-8 h-8 text-primary" />;
-            case 'info': return <Info className="w-8 h-8 text-blue-500" />;
-            default: return <Info className="w-8 h-8 text-blue-500" />;
+            case 'success': return <Lucide.CheckCircle className="w-8 h-8 text-emerald-500" />;
+            case 'error': return <Lucide.XCircle className="w-8 h-8 text-rose-500" />;
+            case 'confirm': return <Lucide.HelpCircle className="w-8 h-8 text-primary" />;
+            case 'info': return <Lucide.Info className="w-8 h-8 text-blue-500" />;
+            default: return <Lucide.Info className="w-8 h-8 text-blue-500" />;
         }
     };
 

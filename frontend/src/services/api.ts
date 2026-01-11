@@ -1,5 +1,5 @@
 // API Configuration for Laravel Backend
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 // Token management
 const getToken = (): string | null => localStorage.getItem('auth_token');
@@ -88,6 +88,7 @@ export interface DashboardStats {
 export interface Settings {
     weekly_fee: number;
     weeks_per_month: number;
+    is_configured?: boolean;
 }
 
 export interface ArrearsItem {
@@ -158,6 +159,17 @@ export const pemasukanApi = {
 
     getMyPayments: async () => {
         return apiFetch('/pemasukan/my-payments');
+    },
+
+    bulkStore: async (data: {
+        user_id: number;
+        bulan: number;
+        tahun: number;
+    }) => {
+        return apiFetch('/pemasukan/bulk', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
     },
 
     store: async (data: {
@@ -365,6 +377,7 @@ export const api = {
                 id: t.id,
                 title: t.judul,
                 date: formattedDate,
+                createdAt: t.created_at, // Map full timestamp
                 category: 'Pengeluaran',
                 amount: Math.round(Number(t.nominal) || 0), // Ensure integer
                 type: 'expense' as const,
@@ -401,6 +414,7 @@ export const api = {
         return {
             weeklyFee: settings.weekly_fee,
             weeksPerMonth: settings.weeks_per_month,
+            is_configured: settings.is_configured,
         };
     },
 

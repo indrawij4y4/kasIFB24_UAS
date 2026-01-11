@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cn } from "../../lib/utils";
-import { Loader2 } from "lucide-react";
+import * as Lucide from "lucide-react";
 
 export interface ButtonProps
     extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -33,7 +33,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                 )}
                 {...props}
             >
-                {isLoading && <Loader2 className="mr-2 h-5 w-5 animate-spin" />}
+                {isLoading && <Lucide.Loader2 className="mr-2 h-5 w-5 animate-spin" />}
                 {children}
             </button>
         );

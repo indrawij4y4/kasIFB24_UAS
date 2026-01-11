@@ -1,4 +1,4 @@
-import { Home, Grid3x3, ClipboardList, Trophy, Download } from "lucide-react";
+import { Home, Grid3x3, ClipboardList, Trophy, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "../../lib/utils";
 import { motion } from "framer-motion";
@@ -8,7 +8,7 @@ const navItems = [
     { id: "matrix", label: "Matrix", icon: Grid3x3, path: "/matrix" },
     { id: "report", label: "Laporan", icon: ClipboardList, path: "/report" },
     { id: "leaderboard", label: "Leader", icon: Trophy, path: "/leaderboard" },
-    { id: "export", label: "Export", icon: Download, path: "/export" },
+    { id: "settings", label: "Setup", icon: Settings, path: "/settings" },
 ];
 
 export function BottomNav() {

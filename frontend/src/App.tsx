@@ -15,6 +15,7 @@ const preloadLeaderboard = () => import('./features/leaderboard/LeaderboardScree
 const preloadExport = () => import('./features/export/ExportScreen');
 const preloadArrears = () => import('./features/admin/ArrearsScreen');
 const preloadInputForms = () => import('./features/admin/InputForms');
+const preloadSettings = () => import('./features/settings/SettingsScreen');
 
 // Lazy load routes for code splitting
 const DashboardScreen = lazy(() => preloadDashboard().then(m => ({ default: m.DashboardScreen })));
@@ -25,6 +26,7 @@ const ExportScreen = lazy(() => preloadExport().then(m => ({ default: m.ExportSc
 const ArrearsScreen = lazy(() => preloadArrears().then(m => ({ default: m.ArrearsScreen })));
 const InputInScreen = lazy(() => preloadInputForms().then(m => ({ default: m.InputInScreen })));
 const InputOutScreen = lazy(() => preloadInputForms().then(m => ({ default: m.InputOutScreen })));
+const SettingsScreen = lazy(() => preloadSettings().then(m => ({ default: m.SettingsScreen })));
 
 // Preload all route chunks (call this after login)
 export function preloadAllRoutes() {
@@ -35,6 +37,7 @@ export function preloadAllRoutes() {
   preloadExport();
   preloadArrears();
   preloadInputForms();
+  preloadSettings();
 }
 
 // Simple loading spinner
@@ -100,6 +103,7 @@ function AppRoutes() {
             <Route path="/arrears" element={<ProtectedRoute><ArrearsScreen /></ProtectedRoute>} />
             <Route path="/admin/in" element={<ProtectedRoute><InputInScreen /></ProtectedRoute>} />
             <Route path="/admin/out" element={<ProtectedRoute><InputOutScreen /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><SettingsScreen /></ProtectedRoute>} />
           </Route>
         </Routes>
       </Suspense>
@@ -110,7 +114,7 @@ function AppRoutes() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <AuthProvider>
           <AppRoutes />
         </AuthProvider>

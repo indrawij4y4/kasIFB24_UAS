@@ -64,6 +64,17 @@
   .glass-panel {
     @apply bg-white bg-opacity-70 backdrop-blur-lg border border-white/20;
   }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /* Animations */

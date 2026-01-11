@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, pemasukanApi, pengeluaranApi } from '../../services/api';
+import { api, pemasukanApi, pengeluaranApi, exportApi } from '../../services/api';
 import { useAuth } from '../auth/AuthContext';
-import { Loader2, Wallet, Calendar, ArrowUpCircle, ArrowDownCircle, CheckCircle2, Receipt, Trash2, AlertTriangle } from 'lucide-react';
-import { Select } from '../../components/ui/Select';
+import { Loader2, Wallet, Calendar, ArrowUpCircle, ArrowDownCircle, CheckCircle2, Receipt, Trash2, Download, ChevronDown, FileText, FileSpreadsheet } from 'lucide-react';
+
 import { Modal } from '../../components/ui/Modal';
+import { BottomSheet } from '../../components/ui/BottomSheet';
 import { cn } from '../../lib/utils';
+import { REALTIME_INTERVAL } from '../../config';
 
 // Get current month and year
 const currentMonth = new Date().getMonth() + 1;
@@ -18,11 +20,9 @@ export function ReportScreen() {
 
     const [activeTab, setActiveTab] = useState<'income' | 'expense'>('income');
     const [selectedMonth, setSelectedMonth] = useState(currentMonth.toString());
-    const [selectedYear, setSelectedYear] = useState(currentYear.toString());
+    const [selectedYear] = useState(currentYear.toString());
+    const [showExportMenu, setShowExportMenu] = useState(false);
 
-    // Reset modal state
-    const [resetModal, setResetModal] = useState(false);
-    const [resetSuccess, setResetSuccess] = useState(false);
 
     // Delete success modal state
     const [deleteSuccess, setDeleteSuccess] = useState(false);
@@ -35,52 +35,54 @@ export function ReportScreen() {
         title: string;
     } | null>(null);
 
+    // Error modal state
+    const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
+        isOpen: false,
+        message: ''
+    });
+
+    // Auto-refresh interval for realtime updates
+    // Imported from config
+
+
     const { data: transactions, isLoading: isLoadingTransactions } = useQuery({
         queryKey: ['transactions', selectedMonth, selectedYear],
         queryFn: () => api.getTransactions(parseInt(selectedMonth), parseInt(selectedYear)),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 5 * 1000,
+        refetchInterval: REALTIME_INTERVAL, // Realtime updates
     });
 
     // Fetch students data for the selected period to calculate income
     const { data: students, isLoading: isLoadingStudents } = useQuery({
         queryKey: ['students', selectedMonth, selectedYear],
         queryFn: () => api.getStudents(parseInt(selectedMonth), parseInt(selectedYear)),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 5 * 1000,
+        refetchInterval: REALTIME_INTERVAL,
     });
 
     const { data: stats, isLoading: isLoadingStats } = useQuery({
         queryKey: ['stats'],
         queryFn: api.getStats,
-        staleTime: 5 * 60 * 1000,
+        staleTime: 5 * 1000,
+        refetchInterval: REALTIME_INTERVAL,
     });
+
+    const { data: settings } = useQuery({
+        queryKey: ['settings'],
+        queryFn: () => api.getSettings(),
+        staleTime: 30 * 1000,
+    });
+
 
     // Fetch detailed income list for the selected period
     const { data: incomeList, isLoading: isLoadingIncomeList } = useQuery({
         queryKey: ['incomeList', selectedMonth, selectedYear],
         queryFn: () => pemasukanApi.getList(parseInt(selectedMonth), parseInt(selectedYear)),
-        staleTime: 5 * 60 * 1000,
+        staleTime: 5 * 1000,
+        refetchInterval: REALTIME_INTERVAL,
     });
 
-    // Reset mutation
-    const resetMutation = useMutation({
-        mutationFn: api.resetAllData,
-        onSuccess: () => {
-            // Invalidate all relevant queries to sync data across all screens
-            queryClient.invalidateQueries({ queryKey: ['dashboardStats'] });
-            queryClient.invalidateQueries({ queryKey: ['stats'] });
-            queryClient.invalidateQueries({ queryKey: ['transactions'] });
-            queryClient.invalidateQueries({ queryKey: ['students'] });
-            queryClient.invalidateQueries({ queryKey: ['arrears'] });
-            queryClient.invalidateQueries({ queryKey: ['leaderboard'] });
-            queryClient.invalidateQueries({ queryKey: ['incomeList'] });
-            setResetModal(false);
-            setResetSuccess(true);
-        },
-        onError: (error: any) => {
-            alert('Gagal menghapus data: ' + (error.message || 'Unknown error'));
-            setResetModal(false);
-        }
-    });
+
 
     // Delete income (pemasukan) mutation
     const deleteIncomeMutation = useMutation({
@@ -95,7 +97,7 @@ export function ReportScreen() {
             setDeleteSuccess(true);
         },
         onError: (error: any) => {
-            alert('Gagal menghapus pemasukan: ' + (error.message || 'Unknown error'));
+            setErrorModal({ isOpen: true, message: 'Gagal menghapus pemasukan: ' + (error.message || 'Unknown error') });
         }
     });
 
@@ -110,7 +112,7 @@ export function ReportScreen() {
             setDeleteSuccess(true);
         },
         onError: (error: any) => {
-            alert('Gagal menghapus pengeluaran: ' + (error.message || 'Unknown error'));
+            setErrorModal({ isOpen: true, message: 'Gagal menghapus pengeluaran: ' + (error.message || 'Unknown error') });
         }
     });
 
@@ -141,10 +143,10 @@ export function ReportScreen() {
     ];
 
     // Dynamic years: current year ± 2
-    const years = Array.from({ length: 5 }, (_, i) => {
-        const y = currentYear - 2 + i;
-        return { label: y.toString(), value: y.toString() };
-    });
+    // const years = Array.from({ length: 5 }, (_, i) => {
+    //     const y = currentYear - 2 + i;
+    //     return { label: y.toString(), value: y.toString() };
+    // });
 
     const selectedMonthLabel = months[parseInt(selectedMonth) - 1]?.label || 'Unknown';
 
@@ -166,347 +168,455 @@ export function ReportScreen() {
         .reduce((sum, t) => sum + t.amount, 0);
     const balance = stats.balance;
 
-    // Check if there's actual data for this period
-    const hasDataForPeriod = income > 0 || expense > 0;
+    // Check if there's actual data for this period OR if it's configured
+    // We want to show the report (even if 0) if the period is configured in settings
+    const isConfigured = settings && settings.weeklyFee > 0;
+    const hasDataForPeriod = income > 0 || expense > 0 || isConfigured;
 
     return (
         <div className="p-4 md:p-8 bg-background min-h-screen animate-fadeIn pb-32 font-sans">
             <div className="max-w-5xl mx-auto space-y-8">
 
                 {/* Header & Filter */}
-                <div className="flex flex-col gap-6">
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                        <div>
+                <div className="flex flex-col gap-8">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div className="pb-2">
                             <h2 className="text-3xl font-extrabold text-foreground tracking-tight">Laporan Keuangan</h2>
-                            <p className="text-muted-foreground mt-1">Ringkasan lengkap aktivitas keuangan kas.</p>
+                            <p className="text-gray-600 dark:text-gray-300 mt-1 text-sm md:text-base max-w-md font-medium">
+                                Ringkasan lengkap aktivitas keuangan kas.
+                            </p>
                         </div>
 
-                        {/* Compact Period Filter */}
-                        <div className="bg-card p-2 rounded-2xl shadow-sm border border-border flex items-center gap-3 w-full md:w-auto">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
-                                <Calendar className="w-5 h-5" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2 flex-1 md:min-w-[280px]">
-                                <Select
-                                    label=""
-                                    value={selectedMonth}
-                                    onChange={(e) => setSelectedMonth(e.target.value)}
-                                    options={months}
-                                />
-                                <Select
-                                    label=""
-                                    value={selectedYear}
-                                    onChange={(e) => setSelectedYear(e.target.value)}
-                                    options={years}
-                                />
+                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+                            {/* Action Toolbar - Merged Filter & Export */}
+                            <div className="bg-card p-2 rounded-2xl shadow-sm border border-border flex flex-row items-center gap-2 sm:gap-3 w-full sm:w-auto">
+                                {/* Calendar Icon & Month/Year Selects */}
+                                <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                                    <div className="hidden sm:flex w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+                                        <Calendar className="w-5 h-5" />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 flex-1 min-w-0">
+                                        <div className="relative h-10">
+                                            <select
+                                                value={selectedMonth}
+                                                onChange={(e) => setSelectedMonth(e.target.value)}
+                                                className="w-full h-full pl-3 pr-8 rounded-xl bg-muted/30 border-transparent hover:bg-muted/50 focus:bg-muted/50 transition-colors text-sm font-bold text-foreground appearance-none outline-none cursor-pointer"
+                                            >
+                                                {months.map((m) => (
+                                                    <option key={m.value} value={m.value} className="bg-card text-foreground">
+                                                        {m.label}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                                        </div>
+                                        <div className="relative h-10">
+                                            <select
+                                                value={selectedYear}
+                                                disabled
+                                                className="w-full h-full pl-3 pr-3 rounded-xl bg-muted/30 border-transparent text-center text-sm font-bold text-muted-foreground appearance-none outline-none cursor-not-allowed"
+                                            >
+                                                <option value={currentYear}>{currentYear}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Divider (Hidden on mobile, visible on desktop) */}
+                                <div className="hidden sm:block w-px h-8 bg-border mx-1" />
+
+                                {/* Export Dropdown Wrapper */}
+                                <div className="relative shrink-0">
+                                    <button
+                                        onClick={() => setShowExportMenu(true)}
+                                        className="h-10 w-10 sm:w-auto px-0 sm:px-4 rounded-xl hover:bg-muted/50 transition-colors flex items-center justify-center gap-2 group border border-transparent hover:border-border sm:border-0 bg-muted/30 sm:bg-transparent"
+                                        aria-label="Export Laporan"
+                                    >
+                                        <div className="w-6 h-6 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                                            <Download className="w-3.5 h-3.5" />
+                                        </div>
+                                        <span className="hidden sm:inline text-sm font-bold text-foreground">Export</span>
+                                        <ChevronDown className="hidden sm:block w-4 h-4 text-muted-foreground" />
+                                    </button>
+                                    {/* Dropdown removed, replaced by BottomSheet */}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                {!hasDataForPeriod ? (
-                    /* No Data Available - Show Warning */
-                    <div className="bg-card rounded-[2rem] border border-dashed border-border p-12 text-center">
-                        <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
-                            <Calendar className="w-10 h-10 text-muted-foreground" />
+                    {!hasDataForPeriod ? (
+                        /* No Data Available - Show Warning */
+                        <div className="bg-card rounded-[2rem] border border-dashed border-border p-12 text-center">
+                            <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-6">
+                                <Calendar className="w-10 h-10 text-muted-foreground" />
+                            </div>
+                            <h3 className="text-xl font-bold text-foreground mb-2">Belum Ada Data</h3>
+                            <p className="text-muted-foreground max-w-md mx-auto mb-6">
+                                Belum ada transaksi yang tercatat untuk periode <span className="font-semibold text-foreground">{selectedMonthLabel}</span>.
+                                Silakan konfigurasikan kas di menu Settings.
+                            </p>
                         </div>
-                        <h3 className="text-xl font-bold text-foreground mb-2">Belum Ada Data</h3>
-                        <p className="text-muted-foreground max-w-md mx-auto mb-6">
-                            Belum ada transaksi yang tercatat untuk periode <span className="font-semibold text-foreground">{selectedMonthLabel} {selectedYear}</span>.
-                            Silakan pilih periode lain atau hubungi admin.
-                        </p>
-                    </div>
-                ) : (
-                    <>
-                        {/* Summary Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {/* Balance */}
-                            <div className="group relative p-6 rounded-[2rem] bg-card border border-border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center">
-                                        <Wallet className="w-6 h-6 stroke-[2px]" />
+                    ) : (
+                        <>
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                {/* Balance */}
+                                <div className="group relative p-6 rounded-[2rem] bg-card border border-border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center">
+                                            <Wallet className="w-6 h-6 stroke-[2px]" />
+                                        </div>
+                                        <span className="text-xs font-bold px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
+                                            Total Kas
+                                        </span>
                                     </div>
-                                    <span className="text-[10px] font-bold px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
-                                        Total Kas
-                                    </span>
+                                    <div className="relative z-10">
+                                        <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider mb-2">Saldo Akhir</p>
+                                        <h3 className="text-2xl font-extrabold text-foreground">Rp {balance.toLocaleString('id-ID')}</h3>
+                                    </div>
+                                    <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-blue-500 rounded-full opacity-5 blur-2xl transition-opacity group-hover:opacity-10" />
                                 </div>
-                                <div className="relative z-10">
-                                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider mb-2">Saldo Akhir</p>
-                                    <h3 className="text-2xl font-extrabold text-foreground">Rp {balance.toLocaleString('id-ID')}</h3>
+
+                                {/* Income */}
+                                <div className="group relative p-6 rounded-[2rem] bg-card border border-border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center">
+                                            <ArrowUpCircle className="w-6 h-6 stroke-[2px]" />
+                                        </div>
+                                    </div>
+                                    <div className="relative z-10">
+                                        <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider mb-2">Total Pemasukan</p>
+                                        <h3 className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">+Rp {income.toLocaleString('id-ID')}</h3>
+                                    </div>
+                                    <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500 rounded-full opacity-5 blur-2xl transition-opacity group-hover:opacity-10" />
                                 </div>
-                                <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-blue-500 rounded-full opacity-5 blur-2xl transition-opacity group-hover:opacity-10" />
+
+                                {/* Expense */}
+                                <div className="group relative p-6 rounded-[2rem] bg-card border border-border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
+                                    <div className="flex justify-between items-start mb-6">
+                                        <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center">
+                                            <ArrowDownCircle className="w-6 h-6 stroke-[2px]" />
+                                        </div>
+                                    </div>
+                                    <div className="relative z-10">
+                                        <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider mb-2">Total Pengeluaran</p>
+                                        <h3 className="text-2xl font-extrabold text-rose-600 dark:text-rose-400">-Rp {expense.toLocaleString('id-ID')}</h3>
+                                    </div>
+                                    <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-rose-500 rounded-full opacity-5 blur-2xl transition-opacity group-hover:opacity-10" />
+                                </div>
                             </div>
 
-                            {/* Income */}
-                            <div className="group relative p-6 rounded-[2rem] bg-card border border-border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center">
-                                        <ArrowUpCircle className="w-6 h-6 stroke-[2px]" />
-                                    </div>
-                                </div>
-                                <div className="relative z-10">
-                                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider mb-2">Total Pemasukan</p>
-                                    <h3 className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">+Rp {income.toLocaleString('id-ID')}</h3>
-                                </div>
-                                <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-emerald-500 rounded-full opacity-5 blur-2xl transition-opacity group-hover:opacity-10" />
+                            {/* Mobile Tabs */}
+                            <div className="flex md:hidden bg-card p-1 rounded-xl shadow-sm border border-border sticky top-0 z-20">
+                                <button
+                                    onClick={() => setActiveTab('income')}
+                                    className={cn(
+                                        "flex-1 py-2.5 text-xs font-bold rounded-lg transition-all",
+                                        activeTab === 'income' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 shadow-sm' : 'text-muted-foreground hover:bg-muted'
+                                    )}
+                                >
+                                    Pemasukan
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('expense')}
+                                    className={cn(
+                                        "flex-1 py-2.5 text-xs font-bold rounded-lg transition-all",
+                                        activeTab === 'expense' ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 shadow-sm' : 'text-muted-foreground hover:bg-muted'
+                                    )}
+                                >
+                                    Pengeluaran
+                                </button>
                             </div>
 
-                            {/* Expense */}
-                            <div className="group relative p-6 rounded-[2rem] bg-card border border-border shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                                <div className="flex justify-between items-start mb-6">
-                                    <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center">
-                                        <ArrowDownCircle className="w-6 h-6 stroke-[2px]" />
+                            {/* Content Sections */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+
+                                {/* Income List */}
+                                <div className={cn("space-y-4", activeTab === 'expense' ? 'hidden md:block' : 'block')}>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
+                                            Rincian Pemasukan
+                                        </h4>
+                                        <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">{incomeList?.length || 0} transaksi</span>
                                     </div>
-                                </div>
-                                <div className="relative z-10">
-                                    <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider mb-2">Total Pengeluaran</p>
-                                    <h3 className="text-2xl font-extrabold text-rose-600 dark:text-rose-400">-Rp {expense.toLocaleString('id-ID')}</h3>
-                                </div>
-                                <div className="absolute -right-6 -bottom-6 w-24 h-24 bg-rose-500 rounded-full opacity-5 blur-2xl transition-opacity group-hover:opacity-10" />
-                            </div>
-                        </div>
 
-                        {/* Mobile Tabs */}
-                        <div className="flex md:hidden bg-card p-1 rounded-xl shadow-sm border border-border sticky top-0 z-20">
-                            <button
-                                onClick={() => setActiveTab('income')}
-                                className={cn(
-                                    "flex-1 py-2.5 text-xs font-bold rounded-lg transition-all",
-                                    activeTab === 'income' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 shadow-sm' : 'text-muted-foreground hover:bg-muted'
-                                )}
-                            >
-                                Pemasukan
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('expense')}
-                                className={cn(
-                                    "flex-1 py-2.5 text-xs font-bold rounded-lg transition-all",
-                                    activeTab === 'expense' ? 'bg-rose-50 dark:bg-rose-900/20 text-rose-700 dark:text-rose-400 shadow-sm' : 'text-muted-foreground hover:bg-muted'
-                                )}
-                            >
-                                Pengeluaran
-                            </button>
-                        </div>
-
-                        {/* Content Sections */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-
-                            {/* Income List */}
-                            <div className={cn("space-y-4", activeTab === 'expense' ? 'hidden md:block' : 'block')}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></div>
-                                        Rincian Pemasukan
-                                    </h4>
-                                    <span className="text-xs text-muted-foreground">{incomeList?.length || 0} transaksi</span>
-                                </div>
-
-                                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-                                    {incomeList && incomeList.length > 0 ? (
-                                        incomeList.map((item: any) => {
-                                            // Format date
-                                            let formattedDate = '-';
-                                            if (item.tanggal) {
-                                                try {
-                                                    const dateObj = new Date(item.tanggal);
-                                                    if (!isNaN(dateObj.getTime())) {
-                                                        formattedDate = dateObj.toLocaleDateString('id-ID', {
-                                                            day: 'numeric',
-                                                            month: 'short',
-                                                            year: 'numeric'
-                                                        });
+                                    <div className="space-y-3 h-[500px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-800 scrollbar-track-transparent">
+                                        {incomeList && incomeList.length > 0 ? (
+                                            incomeList.map((item: any) => {
+                                                // Format date
+                                                let formattedDate = '-';
+                                                if (item.tanggal) {
+                                                    try {
+                                                        const dateObj = new Date(item.tanggal);
+                                                        if (!isNaN(dateObj.getTime())) {
+                                                            formattedDate = dateObj.toLocaleDateString('id-ID', {
+                                                                day: 'numeric',
+                                                                month: 'short',
+                                                                year: 'numeric'
+                                                            });
+                                                        }
+                                                    } catch (e) {
+                                                        formattedDate = item.tanggal;
                                                     }
-                                                } catch (e) {
-                                                    formattedDate = item.tanggal;
                                                 }
-                                            }
 
-                                            return (
-                                                <div key={item.id} className="group flex justify-between items-center bg-card p-4 rounded-[1.5rem] border border-border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
+                                                return (
+                                                    <div key={item.id} className="group flex justify-between items-center bg-card p-4 rounded-[1.5rem] border border-border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+                                                                <Wallet className="w-5 h-5" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-bold text-foreground text-sm mb-0.5">{item.nama}</p>
+                                                                <p className="text-xs text-muted-foreground font-medium">
+                                                                    Minggu {item.minggu_ke} • {formattedDate}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="text-right">
+                                                                <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm">+Rp {item.nominal.toLocaleString('id-ID')}</p>
+                                                            </div>
+                                                            {/* Admin Delete Button */}
+                                                            {isAdmin && (
+                                                                <button
+                                                                    onClick={() => setDeleteModal({
+                                                                        isOpen: true,
+                                                                        type: 'income',
+                                                                        id: item.id,
+                                                                        title: `${item.nama} - Minggu ${item.minggu_ke}`
+                                                                    })}
+                                                                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all"
+                                                                    title="Hapus pemasukan"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center py-10 px-6 text-center bg-muted/30 rounded-[1.5rem] h-full">
+                                                <div className="w-14 h-14 bg-card rounded-full flex items-center justify-center mb-3 shadow-sm">
+                                                    <Receipt className="w-6 h-6 text-muted-foreground/50" />
+                                                </div>
+                                                <p className="font-bold text-muted-foreground text-sm">Belum ada pemasukan</p>
+                                                <p className="text-xs text-muted-foreground/70 mt-1 max-w-[200px]">
+                                                    Tidak ada catatan transaksi masuk untuk periode ini.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Expense List */}
+                                <div className={cn("space-y-4", activeTab === 'income' ? 'hidden md:block' : 'block')}>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]"></div>
+                                            Rincian Pengeluaran
+                                        </h4>
+                                        <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">
+                                            {transactions.filter(t => t.type === 'expense').length} transaksi
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-3 h-[500px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-gray-800 scrollbar-track-transparent">
+                                        {transactions
+                                            .filter(t => t.type === 'expense')
+                                            .map(t => (
+                                                <div key={t.id} className="group flex justify-between items-center bg-card p-5 rounded-[1.5rem] border border-border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
-                                                            <Wallet className="w-5 h-5" />
+                                                        <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center text-rose-600 dark:text-rose-400 group-hover:scale-110 transition-transform">
+                                                            <ArrowDownCircle className="w-6 h-6" />
                                                         </div>
                                                         <div>
-                                                            <p className="font-bold text-foreground text-sm mb-0.5">{item.nama}</p>
-                                                            <p className="text-xs text-muted-foreground font-medium">
-                                                                Minggu {item.minggu_ke} • {formattedDate}
-                                                            </p>
+                                                            <p className="font-bold text-foreground text-sm mb-0.5">{t.title}</p>
+                                                            <p className="text-xs text-muted-foreground font-medium">{t.date} • {t.category}</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-3">
                                                         <div className="text-right">
-                                                            <p className="font-black text-emerald-600 dark:text-emerald-400 text-sm">+Rp {item.nominal.toLocaleString('id-ID')}</p>
+                                                            <p className="font-black text-rose-600 dark:text-rose-400 text-sm mb-1">-Rp {t.amount.toLocaleString('id-ID')}</p>
+                                                            <div className="flex items-center justify-end gap-1.5 text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-900/40 px-2.5 py-1 rounded-full w-fit ml-auto">
+                                                                <CheckCircle2 className="w-3 h-3" />
+                                                                <span>Selesai</span>
+                                                            </div>
                                                         </div>
                                                         {/* Admin Delete Button */}
                                                         {isAdmin && (
                                                             <button
                                                                 onClick={() => setDeleteModal({
                                                                     isOpen: true,
-                                                                    type: 'income',
-                                                                    id: item.id,
-                                                                    title: `${item.nama} - Minggu ${item.minggu_ke}`
+                                                                    type: 'expense',
+                                                                    id: t.id,
+                                                                    title: t.title
                                                                 })}
                                                                 className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all"
-                                                                title="Hapus pemasukan"
+                                                                title="Hapus pengeluaran"
                                                             >
                                                                 <Trash2 className="w-4 h-4" />
                                                             </button>
                                                         )}
                                                     </div>
                                                 </div>
-                                            );
-                                        })
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center py-10 px-6 text-center bg-muted/30 rounded-[1.5rem] min-h-[100px]">
-                                            <div className="w-14 h-14 bg-card rounded-full flex items-center justify-center mb-3 shadow-sm">
-                                                <Receipt className="w-6 h-6 text-muted-foreground/50" />
-                                            </div>
-                                            <p className="font-bold text-muted-foreground text-sm">Belum ada pemasukan</p>
-                                            <p className="text-xs text-muted-foreground/70 mt-1 max-w-[200px]">
-                                                Tidak ada catatan transaksi masuk untuk periode ini.
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                                            ))}
 
-                            {/* Expense List */}
-                            <div className={cn("space-y-4", activeTab === 'income' ? 'hidden md:block' : 'block')}>
-                                <div className="flex items-center justify-between mb-4">
-                                    <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]"></div>
-                                        Rincian Pengeluaran
-                                    </h4>
-                                </div>
-
-                                <div className="space-y-3">
-                                    {transactions
-                                        .filter(t => t.type === 'expense')
-                                        .map(t => (
-                                            <div key={t.id} className="group flex justify-between items-center bg-card p-5 rounded-[1.5rem] border border-border shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center text-rose-600 dark:text-rose-400 group-hover:scale-110 transition-transform">
-                                                        <ArrowDownCircle className="w-6 h-6" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-bold text-foreground text-sm mb-0.5">{t.title}</p>
-                                                        <p className="text-xs text-muted-foreground font-medium">{t.date} • {t.category}</p>
-                                                    </div>
+                                        {/* Empty State */}
+                                        {transactions.filter(t => t.type === 'expense').length === 0 && (
+                                            <div className="flex flex-col items-center justify-center py-10 px-6 text-center bg-muted/30 rounded-[1.5rem] h-full">
+                                                <div className="w-14 h-14 bg-card rounded-full flex items-center justify-center mb-3 shadow-sm">
+                                                    <Receipt className="w-6 h-6 text-muted-foreground/50" />
                                                 </div>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="text-right">
-                                                        <p className="font-black text-rose-600 dark:text-rose-400 text-sm mb-1">-Rp {t.amount.toLocaleString('id-ID')}</p>
-                                                        <div className="flex items-center justify-end gap-1.5 text-[10px] text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-900/40 px-2.5 py-1 rounded-full w-fit ml-auto">
-                                                            <CheckCircle2 className="w-3 h-3" />
-                                                            <span>Selesai</span>
-                                                        </div>
-                                                    </div>
-                                                    {/* Admin Delete Button */}
-                                                    {isAdmin && (
-                                                        <button
-                                                            onClick={() => setDeleteModal({
-                                                                isOpen: true,
-                                                                type: 'expense',
-                                                                id: t.id,
-                                                                title: t.title
-                                                            })}
-                                                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-2 rounded-lg bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all"
-                                                            title="Hapus pengeluaran"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
-                                                    )}
-                                                </div>
+                                                <p className="font-bold text-muted-foreground text-sm">Belum ada pengeluaran</p>
+                                                <p className="text-xs text-muted-foreground/70 mt-1 max-w-[200px]">
+                                                    Tidak ada catatan transaksi keluar untuk periode ini.
+                                                </p>
                                             </div>
-                                        ))}
+                                        )}
+                                    </div>
+                                </div>
 
-                                    {/* Empty State */}
-                                    {transactions.filter(t => t.type === 'expense').length === 0 && (
-                                        <div className="flex flex-col items-center justify-center py-10 px-6 text-center bg-muted/30 rounded-[1.5rem] min-h-[100px]">
-                                            <div className="w-14 h-14 bg-card rounded-full flex items-center justify-center mb-3 shadow-sm">
-                                                <Receipt className="w-6 h-6 text-muted-foreground/50" />
-                                            </div>
-                                            <p className="font-bold text-muted-foreground text-sm">Belum ada pengeluaran</p>
-                                            <p className="text-xs text-muted-foreground/70 mt-1 max-w-[200px]">
-                                                Tidak ada catatan transaksi keluar untuk periode ini.
-                                            </p>
+                            </div>
+                        </>
+                    )}
+
+                    {/* Export Bottom Sheet */}
+                    <BottomSheet
+                        isOpen={showExportMenu}
+                        onClose={() => setShowExportMenu(false)}
+                        title="Export Laporan"
+                    >
+                        <div className="space-y-6">
+                            {/* Pemasukan Section - Emerald */}
+                            <div>
+                                <div className="flex items-center gap-2 px-1 py-1 mb-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                    <div className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                                        Laporan Pemasukan
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        disabled={income <= 0}
+                                        onClick={() => {
+                                            setShowExportMenu(false);
+                                            window.open(exportApi.downloadGlobal('pdf', parseInt(selectedMonth), parseInt(selectedYear)), '_blank');
+                                        }}
+                                        className="flex flex-col items-center justify-center p-4 rounded-2xl bg-muted/30 border border-transparent hover:border-emerald-200 dark:hover:border-emerald-800 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-all group text-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-muted/30 disabled:hover:border-transparent"
+                                    >
+                                        <div className="w-10 h-10 rounded-xl bg-white dark:bg-card border border-emerald-100 dark:border-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm group-hover:scale-105 transition-transform group-disabled:scale-100">
+                                            <FileText className="w-5 h-5" />
                                         </div>
-                                    )}
+                                        <div>
+                                            <p className="font-bold text-foreground text-sm">PDF</p>
+                                            <p className="text-[10px] text-muted-foreground font-medium">Dokumen</p>
+                                        </div>
+                                    </button>
+                                    <button
+                                        disabled={income <= 0}
+                                        onClick={() => {
+                                            setShowExportMenu(false);
+                                            window.open(exportApi.downloadGlobal('excel', parseInt(selectedMonth), parseInt(selectedYear)), '_blank');
+                                        }}
+                                        className="flex flex-col items-center justify-center p-4 rounded-2xl bg-muted/30 border border-transparent hover:border-emerald-200 dark:hover:border-emerald-800 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-all group text-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-muted/30 disabled:hover:border-transparent"
+                                    >
+                                        <div className="w-10 h-10 rounded-xl bg-white dark:bg-card border border-emerald-100 dark:border-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm group-hover:scale-105 transition-transform group-disabled:scale-100">
+                                            <FileSpreadsheet className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-foreground text-sm">Excel</p>
+                                            <p className="text-[10px] text-muted-foreground font-medium">Spreadsheet</p>
+                                        </div>
+                                    </button>
                                 </div>
                             </div>
 
-                        </div>
-                    </>
-                )}
+                            <div className="h-px bg-border/50" />
 
-                {/* Admin Only: Reset All Data Button */}
-                {isAdmin && (
-                    <div className="bg-rose-50 dark:bg-rose-900/10 p-6 rounded-3xl border border-rose-100 dark:border-rose-900/30 mt-8">
-                        <div className="flex items-start gap-4">
-                            <div className="w-12 h-12 bg-rose-100 dark:bg-rose-900/40 rounded-2xl flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
-                                <AlertTriangle className="w-6 h-6" />
-                            </div>
-                            <div className="flex-1">
-                                <h3 className="font-bold text-rose-800 dark:text-rose-300 mb-1">Zona Bahaya</h3>
-                                <p className="text-xs text-rose-600 dark:text-rose-400 mb-4">
-                                    Tindakan di bawah ini bersifat permanen dan tidak dapat dibatalkan.
-                                </p>
-                                <button
-                                    onClick={() => setResetModal(true)}
-                                    className="flex items-center gap-2 bg-rose-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-rose-700 active:scale-95 transition-all"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                    Reset Semua Data
-                                </button>
+                            {/* Pengeluaran Section - Rose */}
+                            <div>
+                                <div className="flex items-center gap-2 px-1 py-1 mb-2">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                    <div className="text-xs font-extrabold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+                                        Laporan Pengeluaran
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        disabled={expense <= 0}
+                                        onClick={() => {
+                                            setShowExportMenu(false);
+                                            window.open(exportApi.downloadPengeluaran('pdf', parseInt(selectedMonth), parseInt(selectedYear)), '_blank');
+                                        }}
+                                        className="flex flex-col items-center justify-center p-4 rounded-2xl bg-muted/30 border border-transparent hover:border-rose-200 dark:hover:border-rose-800 hover:bg-rose-50/50 dark:hover:bg-rose-900/10 transition-all group text-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-muted/30 disabled:hover:border-transparent"
+                                    >
+                                        <div className="w-10 h-10 rounded-xl bg-white dark:bg-card border border-rose-100 dark:border-rose-900/30 flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-sm group-hover:scale-105 transition-transform group-disabled:scale-100">
+                                            <FileText className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-foreground text-sm">PDF</p>
+                                            <p className="text-[10px] text-muted-foreground font-medium">Dokumen</p>
+                                        </div>
+                                    </button>
+                                    <button
+                                        disabled={expense <= 0}
+                                        onClick={() => {
+                                            setShowExportMenu(false);
+                                            window.open(exportApi.downloadPengeluaran('excel', parseInt(selectedMonth), parseInt(selectedYear)), '_blank');
+                                        }}
+                                        className="flex flex-col items-center justify-center p-4 rounded-2xl bg-muted/30 border border-transparent hover:border-rose-200 dark:hover:border-rose-800 hover:bg-rose-50/50 dark:hover:bg-rose-900/10 transition-all group text-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-muted/30 disabled:hover:border-transparent"
+                                    >
+                                        <div className="w-10 h-10 rounded-xl bg-white dark:bg-card border border-rose-100 dark:border-rose-900/30 flex items-center justify-center text-rose-600 dark:text-rose-400 shadow-sm group-hover:scale-105 transition-transform group-disabled:scale-100">
+                                            <FileSpreadsheet className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-foreground text-sm">Excel</p>
+                                            <p className="text-[10px] text-muted-foreground font-medium">Spreadsheet</p>
+                                        </div>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    </BottomSheet>
+
+
+
+                    {/* Delete Single Item Modal */}
+                    <Modal
+                        isOpen={!!deleteModal}
+                        onClose={() => setDeleteModal(null)}
+                        onConfirm={handleDeleteConfirm}
+                        title={`Hapus ${deleteModal?.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}?`}
+                        description={`Apakah Anda yakin ingin menghapus "${deleteModal?.title}"? Tindakan ini tidak dapat dibatalkan.`}
+                        type="confirm"
+                        confirmLabel={
+                            (deleteIncomeMutation.isPending || deleteExpenseMutation.isPending)
+                                ? "Menghapus..."
+                                : "Ya, Hapus"
+                        }
+                    />
+
+
+                    {/* Delete Success Modal */}
+                    <Modal
+                        isOpen={deleteSuccess}
+                        onClose={() => setDeleteSuccess(false)}
+                        title="Berhasil Dihapus"
+                        description="Item telah berhasil dihapus dari sistem."
+                        type="success"
+                    />
+                </div>
             </div>
-
-            {/* Reset Confirmation Modal */}
+            {/* Error Feedback Modal */}
             <Modal
-                isOpen={resetModal}
-                onClose={() => setResetModal(false)}
-                onConfirm={() => resetMutation.mutate()}
-                title="Hapus Semua Data?"
-                description="Tindakan ini akan menghapus SEMUA data pemasukan dan pengeluaran dari sistem. Data yang sudah dihapus tidak dapat dikembalikan. Apakah Anda yakin?"
-                type="confirm"
-                confirmLabel={resetMutation.isPending ? "Menghapus..." : "Ya, Hapus Semua"}
-            />
-
-            {/* Delete Single Item Modal */}
-            <Modal
-                isOpen={!!deleteModal}
-                onClose={() => setDeleteModal(null)}
-                onConfirm={handleDeleteConfirm}
-                title={`Hapus ${deleteModal?.type === 'income' ? 'Pemasukan' : 'Pengeluaran'}?`}
-                description={`Apakah Anda yakin ingin menghapus "${deleteModal?.title}"? Tindakan ini tidak dapat dibatalkan.`}
-                type="confirm"
-                confirmLabel={
-                    (deleteIncomeMutation.isPending || deleteExpenseMutation.isPending)
-                        ? "Menghapus..."
-                        : "Ya, Hapus"
-                }
-            />
-
-            {/* Reset Success Modal */}
-            <Modal
-                isOpen={resetSuccess}
-                onClose={() => setResetSuccess(false)}
-                title="Data Berhasil Dihapus"
-                description="Semua data pemasukan dan pengeluaran telah dihapus dari sistem."
-                type="success"
-            />
-
-            {/* Delete Success Modal */}
-            <Modal
-                isOpen={deleteSuccess}
-                onClose={() => setDeleteSuccess(false)}
-                title="Berhasil Dihapus"
-                description="Item telah berhasil dihapus dari sistem."
-                type="success"
+                isOpen={errorModal.isOpen}
+                onClose={() => setErrorModal({ ...errorModal, isOpen: false })}
+                title="Gagal"
+                description={errorModal.message}
+                type="error"
             />
         </div>
     );

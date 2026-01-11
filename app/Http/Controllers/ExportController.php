@@ -67,8 +67,8 @@ class ExportController extends Controller
             'tahun' => $tahun,
             'data' => $export->collection(),
             'settings' => [
-                'weekly_fee' => Setting::getWeeklyFee(),
-                'weeks_per_month' => Setting::getWeeksPerMonth(),
+                'weekly_fee' => Setting::getPeriodFee($bulan, $tahun),
+                'weeks_per_month' => Setting::getPeriodWeeks($bulan, $tahun),
             ],
         ];
 
@@ -111,7 +111,8 @@ class ExportController extends Controller
             'data' => $export->collection(),
         ];
 
-        $pdf = Pdf::loadView('exports.laporan-pengeluaran', $data);
+        $pdf = Pdf::loadView('exports.laporan-pengeluaran', $data)
+            ->setPaper('a4', 'portrait');
         return $pdf->download("{$filename}.pdf");
     }
 

@@ -2,132 +2,203 @@
 <html>
 
 <head>
-    <meta charset="UTF-8">
-    <title>Laporan Pemasukan {{ $bulan }} {{ $tahun }}</title>
+    <meta charset="utf-8">
+    <title>Laporan Pemasukan - {{ $bulan }} {{ $tahun }}</title>
     <style>
-        @page {
-            size: A4 portrait;
-            margin: 8mm;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
         body {
-            font-family: Arial, sans-serif;
-            font-size: 9px;
-            margin: 0;
-            padding: 0;
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 10pt;
+            /* Reduced font size */
+            line-height: 1.2;
+            /* Tighter line height */
+            padding: 10px;
+            /* Reduced padding */
         }
 
-        h1 {
+        .header {
             text-align: center;
-            font-size: 14px;
-            margin-bottom: 3px;
-            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 10px;
         }
 
-        h2 {
-            text-align: center;
-            font-size: 11px;
+        .header h1 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .header h2 {
+            font-size: 12pt;
             font-weight: normal;
-            margin-top: 0;
-            margin-bottom: 8px;
-            color: #666;
+            margin-bottom: 3px;
         }
 
-        table {
+        .header p {
+            font-size: 10pt;
+            color: #000;
+            /* Solid black */
+            font-weight: bold;
+        }
+
+        /* Remove info section as requested "taruh intinya saja" */
+        .info-section {
+            display: none;
+        }
+
+        table.data-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 5px;
+            margin-bottom: 10px;
         }
 
-        th,
-        td {
-            border: 1px solid #333;
-            padding: 3px 4px;
+        table.data-table th,
+        table.data-table td {
+            border: 1px solid #000;
+            padding: 4px 5px;
+            /* Compact padding */
             text-align: center;
-            font-size: 8px;
-        }
-
-        th {
-            background-color: #f0f0f0;
-            font-weight: bold;
-            font-size: 9px;
-        }
-
-        td.nama {
-            text-align: left;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 150px;
+            font-size: 9pt;
+            /* Smaller table font */
         }
 
         .footer {
             margin-top: 10px;
-            text-align: right;
-            font-size: 8px;
-            color: #666;
+            font-size: 9pt;
         }
 
-        .total-row {
-            font-weight: bold;
-            background-color: #f9f9f9;
+        .signature-section {
+            margin-top: 20px;
+            width: 100%;
+            page-break-inside: avoid;
+        }
+
+        .signature-section td {
+            padding: 5px;
+        }
+
+        .signature-line {
+            margin-top: 50px;
+            width: 150px;
+        }
+
+        .date-generated {
+            display: none;
+            /* Hide generated date for cleaner look */
         }
     </style>
 </head>
 
 <body>
-    <h1>LAPORAN PEMASUKAN KELAS IFB24</h1>
-    <h2>Periode: {{ $bulan }} {{ $tahun }}</h2>
+    <div class="header">
+        <h1>Laporan Pemasukan Kas Kelas</h1>
+        <h2>Periode: {{ $bulan }} {{ $tahun }}</h2>
+        <p>Informatics Class IFB24</p>
+    </div>
 
-    <table>
+
+
+    <table class="data-table">
         <thead>
             <tr>
-                <th>No</th>
-                <th>NIM</th>
-                <th>Nama</th>
-                <th>M1</th>
-                <th>M2</th>
-                <th>M3</th>
-                <th>M4</th>
-                @if($settings['weeks_per_month'] >= 5)
-                    <th>M5</th>
+                <th style="width: 30px;">No</th>
+                <th style="width: 80px;">NIM</th>
+                <th>Nama Mahasiswa</th>
+                <th style="width: 60px;">M1</th>
+                <th style="width: 60px;">M2</th>
+                <th style="width: 60px;">M3</th>
+                <th style="width: 60px;">M4</th>
+                @if(($settings['weeks_per_month'] ?? 4) >= 5)
+                    <th style="width: 60px;">M5</th>
                 @endif
-                <th>Total</th>
+                <th style="width: 80px;">Total</th>
             </tr>
         </thead>
         <tbody>
-            @php $grandTotal = 0;
-            $no = 1; @endphp
+            @php
+                $totalM1 = 0;
+                $totalM2 = 0;
+                $totalM3 = 0;
+                $totalM4 = 0;
+                $totalM5 = 0;
+                $grandTotal = 0;
+                $no = 0;
+            @endphp
             @foreach($data as $row)
+                @if($row['nama'] === 'TOTAL PER MINGGU' || $row['nama'] === 'TOTAL KESELURUHAN')
+                    @continue
+                @endif
                 @php
-                    $rowTotal = $row['m1'] + $row['m2'] + $row['m3'] + $row['m4'] + ($row['m5'] ?? 0);
-                    $grandTotal += $rowTotal;
+                    $no++;
+                    $totalM1 += $row['m1'] ?? 0;
+                    $totalM2 += $row['m2'] ?? 0;
+                    $totalM3 += $row['m3'] ?? 0;
+                    $totalM4 += $row['m4'] ?? 0;
+                    $totalM5 += $row['m5'] ?? 0;
+                    $grandTotal += $row['total'] ?? 0;
                 @endphp
                 <tr>
-                    <td>{{ $no++ }}</td>
+                    <td>{{ $no }}</td>
                     <td>{{ $row['nim'] }}</td>
                     <td class="nama">{{ $row['nama'] }}</td>
-                    <td>{{ number_format($row['m1'], 0, ',', '.') }}</td>
-                    <td>{{ number_format($row['m2'], 0, ',', '.') }}</td>
-                    <td>{{ number_format($row['m3'], 0, ',', '.') }}</td>
-                    <td>{{ number_format($row['m4'], 0, ',', '.') }}</td>
-                    @if($settings['weeks_per_month'] >= 5)
-                        <td>{{ number_format($row['m5'] ?? 0, 0, ',', '.') }}</td>
+                    <td class="nominal">{{ number_format($row['m1'] ?? 0, 0, ',', '.') }}</td>
+                    <td class="nominal">{{ number_format($row['m2'] ?? 0, 0, ',', '.') }}</td>
+                    <td class="nominal">{{ number_format($row['m3'] ?? 0, 0, ',', '.') }}</td>
+                    <td class="nominal">{{ number_format($row['m4'] ?? 0, 0, ',', '.') }}</td>
+                    @if(($settings['weeks_per_month'] ?? 4) >= 5)
+                        <td class="nominal">{{ number_format($row['m5'] ?? 0, 0, ',', '.') }}</td>
                     @endif
-                    <td>{{ number_format($rowTotal, 0, ',', '.') }}</td>
+                    <td class="nominal">{{ number_format($row['total'] ?? 0, 0, ',', '.') }}</td>
                 </tr>
             @endforeach
             <tr class="total-row">
-                <td colspan="{{ $settings['weeks_per_month'] >= 5 ? 8 : 7 }}">TOTAL PEMASUKAN</td>
-                <td>Rp {{ number_format($grandTotal, 0, ',', '.') }}</td>
+                <td colspan="3" style="text-align: right; font-weight: bold;">TOTAL PER MINGGU</td>
+                <td class="nominal">{{ number_format($totalM1, 0, ',', '.') }}</td>
+                <td class="nominal">{{ number_format($totalM2, 0, ',', '.') }}</td>
+                <td class="nominal">{{ number_format($totalM3, 0, ',', '.') }}</td>
+                <td class="nominal">{{ number_format($totalM4, 0, ',', '.') }}</td>
+                @if(($settings['weeks_per_month'] ?? 4) >= 5)
+                    <td class="nominal">{{ number_format($totalM5, 0, ',', '.') }}</td>
+                @endif
+                <td class="nominal"></td>
+            </tr>
+            <tr class="grand-total-row">
+                <td colspan="{{ ($settings['weeks_per_month'] ?? 4) >= 5 ? 8 : 7 }}"
+                    style="text-align: right; font-weight: bold;">TOTAL KESELURUHAN</td>
+                <td class="nominal" style="font-weight: bold;">{{ number_format($grandTotal, 0, ',', '.') }}</td>
             </tr>
         </tbody>
     </table>
 
-    <p class="footer">
-        Dicetak pada: {{ now()->format('d/m/Y H:i') }} WIB<br>
-        Iuran Mingguan: Rp {{ number_format($settings['weekly_fee'], 0, ',', '.') }}
-    </p>
+    <div class="signature-section">
+        <table>
+            <tr>
+                <td>
+                    <p>Mengetahui,</p>
+                    <p>Ketua Kelas</p>
+                    <div class="signature-line"></div>
+                    <p class="signature-name">( ............................ )</p>
+                </td>
+                <td>
+                    <p>{{ now()->locale('id')->isoFormat('D MMMM Y') }}</p>
+                    <p>Bendahara</p>
+                    <div class="signature-line"></div>
+                    <p class="signature-name">( ............................ )</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="date-generated">
+        Dokumen ini digenerate pada: {{ now()->format('d/m/Y H:i:s') }}
+    </div>
 </body>
 
 </html>

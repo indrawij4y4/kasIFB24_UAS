@@ -86,7 +86,7 @@ class Setting extends Model
         if ($month && $year) {
             $key = "weeks_per_month_{$year}_{$month}";
             $val = static::getValue($key);
-            if ($val !== null) {
+            if ($val !== null && (int) $val > 0) {
                 return (int) $val;
             }
         }
@@ -101,5 +101,14 @@ class Setting extends Model
     {
         $key = "{$baseKey}_{$year}_{$month}";
         static::setValue($key, $value);
+    }
+
+    /**
+     * Check if setting exists for specific period
+     */
+    public static function hasPeriodValue(string $baseKey, int $month, int $year): bool
+    {
+        $key = "{$baseKey}_{$year}_{$month}";
+        return static::where('key', $key)->exists();
     }
 }

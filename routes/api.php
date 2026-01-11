@@ -65,6 +65,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/users/{id}', [UserController::class, 'show']);
 
         // Pemasukan CRUD
+        Route::post('/pemasukan/bulk', [PemasukanController::class, 'bulkStore']);
         Route::post('/pemasukan', [PemasukanController::class, 'store']);
         Route::put('/pemasukan/{id}', [PemasukanController::class, 'update']);
         Route::delete('/pemasukan/{id}', [PemasukanController::class, 'destroy']);

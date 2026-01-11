@@ -15,8 +15,9 @@ class DashboardController extends Controller
      */
     public function stats(Request $request)
     {
-        // Cache the dashboard stats for 10 minutes (600 seconds)
-        return \Illuminate\Support\Facades\Cache::remember('dashboard_stats', 600, function () {
+        // Cache the dashboard stats for 1 minute (60 seconds) for balance between performance and freshness
+        // Note: Cache is automatically invalidated by Pemasukan/Pengeluaran/Settings updates
+        return \Illuminate\Support\Facades\Cache::remember('dashboard_stats', 60, function () {
             $now = now();
             $currentMonth = $now->month;
             $currentYear = $now->year;
@@ -37,8 +38,8 @@ class DashboardController extends Controller
             $expenseThisMonth = Pengeluaran::forPeriod($currentMonth, $currentYear)->sum('nominal');
 
             // Arrears Count (users who haven't paid full for current month)
-            $weeklyFee = Setting::getWeeklyFee();
-            $weeksPerMonth = Setting::getWeeksPerMonth();
+            $weeklyFee = Setting::getPeriodFee($currentMonth, $currentYear);
+            $weeksPerMonth = Setting::getPeriodWeeks($currentMonth, $currentYear);
 
             // Get all users (including admin) with their payments for this month
             // Eager load only necessary data

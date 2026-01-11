@@ -9,7 +9,8 @@ export interface SelectProps
 }
 
 const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-    ({ className, label, error, options, ...props }, ref) => {
+    ({ className, label, error, options, value, ...props }, ref) => {
+        const isFloating = value !== "" && value !== undefined;
         return (
             <div className="relative mb-6">
                 <div className="floating-label-group relative">
@@ -20,6 +21,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
                             className
                         )}
                         ref={ref}
+                        value={value}
                         {...props}
                     >
                         <option value="" disabled hidden></option>
@@ -33,7 +35,9 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
                         className={cn(
                             "absolute left-4 top-4 text-muted-foreground transition-all pointer-events-none",
                             "peer-focus:top-[0.4rem] peer-focus:text-[0.7rem] peer-focus:font-bold peer-focus:text-primary",
-                            // For Select, if value is present, it should float. Native select valid pseudo-class tricky, so we rely on standard behavior or 'valid'
+                            // If floating manually (due to value) or via valid peer (fallback)
+                            (isFloating) && "top-[0.4rem] text-[0.7rem] font-bold text-primary",
+                            // Keep peer-valid as backup (though manual check covers it)
                             "peer-valid:top-[0.4rem] peer-valid:text-[0.7rem] peer-valid:font-bold peer-valid:text-primary",
                             error && "text-destructive peer-focus:text-destructive peer-valid:text-destructive"
                         )}

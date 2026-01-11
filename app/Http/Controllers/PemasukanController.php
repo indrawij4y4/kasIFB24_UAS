@@ -38,6 +38,7 @@ class PemasukanController extends Controller
                 'minggu_ke' => $p->minggu_ke,
                 'nominal' => (float) $p->nominal,
                 'tanggal' => $p->created_at ? $p->created_at->format('Y-m-d') : null,
+                'created_at' => $p->created_at,
             ];
         });
 
@@ -67,9 +68,8 @@ class PemasukanController extends Controller
             ->orderBy('nama')
             ->get();
 
-        $weeksPerMonth = Setting::getWeeksPerMonth();
 
-        $matrix = $users->map(function ($user) use ($weeksPerMonth) {
+        $matrix = $users->map(function ($user) {
             $payments = $user->pemasukan->keyBy('minggu_ke');
 
             $data = [
@@ -126,13 +126,29 @@ class PemasukanController extends Controller
             ->first();
 
         if ($existing) {
-            $user = User::find($request->user_id);
-            $monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-            $monthName = $monthNames[$request->bulan - 1] ?? $request->bulan;
+            // Check if existing payment is partial (less than new nominal)
+            if ((float) $existing->nominal < (float) $request->nominal) {
+                $existing->update([
+                    'nominal' => $request->nominal
+                ]);
 
+                // Invalidate caches
+                Cache::forget('dashboard_stats');
+                $bulanInt = (int) $request->bulan;
+                $tahunInt = (int) $request->tahun;
+                Cache::forget("arrears_list_{$bulanInt}_{$tahunInt}");
+
+                return response()->json([
+                    'message' => 'Pembayaran berhasil diperbarui (pelunasan).',
+                    'data' => $existing,
+                ], 200);
+            }
+
+            // Idempotency check: If record exists and is fully paid, treat as success
             return response()->json([
-                'message' => "Pembayaran untuk {$user->nama} pada {$monthName} {$request->tahun} Minggu {$request->minggu_ke} sudah tercatat sebelumnya. Tidak dapat menambahkan data duplikat.",
-            ], 422);
+                'message' => 'Pembayaran sudah tercatat sebelumnya.',
+                'data' => $existing,
+            ], 200);
         }
 
         $pemasukan = Pemasukan::create([
@@ -149,7 +165,9 @@ class PemasukanController extends Controller
         Cache::forget('dashboard_stats');
 
         // Invalidate arrears cache for this period
-        $arrearsCacheKey = "arrears_list_{$request->bulan}_{$request->tahun}";
+        $bulanInt = (int) $request->bulan;
+        $tahunInt = (int) $request->tahun;
+        $arrearsCacheKey = "arrears_list_{$bulanInt}_{$tahunInt}";
         Cache::forget($arrearsCacheKey);
 
         return response()->json([
@@ -177,7 +195,9 @@ class PemasukanController extends Controller
         Cache::forget('dashboard_stats');
 
         // Invalidate arrears cache for this period
-        $arrearsCacheKey = "arrears_list_{$pemasukan->bulan}_{$pemasukan->tahun}";
+        $bulanInt = (int) $pemasukan->bulan;
+        $tahunInt = (int) $pemasukan->tahun;
+        $arrearsCacheKey = "arrears_list_{$bulanInt}_{$tahunInt}";
         Cache::forget($arrearsCacheKey);
 
         return response()->json([
@@ -202,11 +222,91 @@ class PemasukanController extends Controller
         Cache::forget('dashboard_stats');
 
         // Invalidate arrears cache for this period
-        $arrearsCacheKey = "arrears_list_{$bulan}_{$tahun}";
+        $bulanInt = (int) $bulan;
+        $tahunInt = (int) $tahun;
+        $arrearsCacheKey = "arrears_list_{$bulanInt}_{$tahunInt}";
         Cache::forget($arrearsCacheKey);
 
         return response()->json([
             'message' => 'Pembayaran berhasil dihapus',
         ]);
+    }
+
+    /**
+     * Bulk Store payments (Pay All remaining weeks for a month)
+     */
+    public function bulkStore(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'bulan' => 'required|integer|min:1|max:12',
+            'tahun' => 'required|integer|min:2020|max:2099',
+        ]);
+
+        $userId = $request->user_id;
+        $bulan = $request->bulan;
+        $tahun = $request->tahun;
+
+        // Get configuration
+        $weeklyFee = Setting::getPeriodFee($bulan, $tahun);
+        $weeksPerMonth = Setting::getPeriodWeeks($bulan, $tahun);
+
+        if ($weeklyFee <= 0) {
+            return response()->json(['message' => 'Biaya mingguan belum dikonfigurasi untuk periode ini.'], 400);
+        }
+
+        // Get existing payments keyed by week
+        $existingPayments = Pemasukan::where('user_id', $userId)
+            ->where('bulan', $bulan)
+            ->where('tahun', $tahun)
+            ->get()
+            ->keyBy('minggu_ke');
+
+        $createdCount = 0;
+        $updatedCount = 0;
+        $totalNominal = 0;
+
+        // Loop through all expected weeks
+        for ($week = 1; $week <= $weeksPerMonth; $week++) {
+            $existing = $existingPayments->get($week);
+
+            if ($existing) {
+                // If exists but partial/underpaid, update it
+                if ((float) $existing->nominal < (float) $weeklyFee) {
+                    $existing->update(['nominal' => $weeklyFee]);
+                    $updatedCount++;
+                    $totalNominal += ($weeklyFee - $existing->nominal);
+                }
+                continue;
+            }
+
+            Pemasukan::create([
+                'user_id' => $userId,
+                'bulan' => $bulan,
+                'tahun' => $tahun,
+                'minggu_ke' => $week,
+                'nominal' => $weeklyFee,
+            ]);
+
+            $createdCount++;
+            $totalNominal += $weeklyFee;
+        }
+
+        if ($createdCount === 0 && $updatedCount === 0) {
+            return response()->json(['message' => 'Semua minggu sudah lunas.'], 200);
+        }
+
+        // Invalidate caches
+        Cache::forget('dashboard_stats');
+        $bulanInt = (int) $bulan;
+        $tahunInt = (int) $tahun;
+        $arrearsCacheKey = "arrears_list_{$bulanInt}_{$tahunInt}";
+        Cache::forget($arrearsCacheKey);
+
+        return response()->json([
+            'message' => "Berhasil melunasi {$createdCount} minggu.",
+            'weeks_paid' => $createdCount,
+            'total_amount' => $totalNominal
+        ], 201);
     }
 }

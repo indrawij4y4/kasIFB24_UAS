@@ -45,7 +45,7 @@ export function LoginScreen() {
                     <div>
                         <div className="flex items-center gap-5 mb-8">
                             <div className="w-20 h-20 bg-white/10 backdrop-blur-md rounded-2xl p-1 flex items-center justify-center shadow-2xl border border-white/10 transform rotate-3 hover:rotate-0 transition-transform duration-500">
-                                <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover rounded-xl" />
+                                <img src="./logo.jpg" alt="Logo" className="w-full h-full object-cover rounded-xl" />
                             </div>
                             <div>
                                 <h2 className="text-sm font-bold tracking-[0.2em] text-cyan-400 uppercase mb-2">Monitoring Dana Kelas</h2>
@@ -100,7 +100,7 @@ export function LoginScreen() {
                     <div className="absolute top-[-50px] left-1/2 -translate-x-1/2 w-[200px] h-[200px] bg-[radial-gradient(circle,rgba(59,130,246,0.3)_0%,rgba(0,0,0,0)_70%)] blur-[40px] -z-10 pointer-events-none"></div>
 
                     <div className="w-[60px] h-[60px] bg-white/10 backdrop-blur-md rounded-2xl p-1 flex items-center justify-center shadow-2xl border border-white/10 mb-4 transform hover:scale-105 transition-transform">
-                        <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover rounded-xl" />
+                        <img src="./logo.jpg" alt="Logo" className="w-full h-full object-cover rounded-xl" />
                     </div>
                     <h1 className="text-2xl font-bold tracking-tight text-white">Kelas IFB24</h1>
                     <p className="text-sm font-medium text-slate-500 mt-1">Informatika Engineering</p>

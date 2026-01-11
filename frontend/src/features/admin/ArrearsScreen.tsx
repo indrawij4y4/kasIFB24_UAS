@@ -25,7 +25,7 @@ export function ArrearsScreen() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [selectedMonth, setSelectedMonth] = useState(currentMonth.toString());
-    const [selectedYear, setSelectedYear] = useState(currentYear.toString());
+    const selectedYear = currentYear.toString();
 
     // Payment Modal State
     const [paymentModal, setPaymentModal] = useState<{ open: boolean; studentName: string; studentNim: string; userId: number | null; week: number | null }>({
@@ -35,6 +35,13 @@ export function ArrearsScreen() {
         userId: null,
         week: null,
     });
+    // Error Modal State
+    const [errorModal, setErrorModal] = useState<{ isOpen: boolean; message: string }>({
+        isOpen: false,
+        message: ''
+    });
+
+    // Success Modal State
     const [successModal, setSuccessModal] = useState(false);
 
     // Determine current "real" week for highlighting overdue
@@ -42,20 +49,28 @@ export function ArrearsScreen() {
     const isCurrentMonth = parseInt(selectedMonth) === currentMonth && parseInt(selectedYear) === currentYear;
     const isPastMonth = parseInt(selectedYear) < currentYear || (parseInt(selectedYear) === currentYear && parseInt(selectedMonth) < currentMonth);
 
+    // Auto-refresh interval for realtime updates (10 seconds)
+    const REALTIME_INTERVAL = 10 * 1000;
+
     const { data: arrears, isLoading } = useQuery({
         queryKey: ['arrears', selectedMonth, selectedYear],
         queryFn: () => api.getArrears(parseInt(selectedMonth), parseInt(selectedYear)),
+        staleTime: 5 * 1000,
+        refetchInterval: REALTIME_INTERVAL, // Realtime updates
     });
 
     // Fetch users to get IDs for mutation
     const { data: users } = useQuery({
         queryKey: ['users'],
         queryFn: usersApi.getAll,
+        staleTime: 30 * 1000, // Less frequent
     });
 
     const { data: settings } = useQuery({
         queryKey: ['settings', selectedMonth, selectedYear],
         queryFn: () => api.getSettings(parseInt(selectedMonth), parseInt(selectedYear)),
+        staleTime: 30 * 1000,
+        refetchInterval: 30 * 1000,
     });
 
     // Use unpaid_weeks from backend directly instead of recalculating
@@ -69,17 +84,28 @@ export function ArrearsScreen() {
         return s.total_unpaid || 0;
     }
 
-    // Mutation for quick payment
-    const mutation = useMutation({
+    // Mutation for bulk payment
+    const bulkMutation = useMutation({
         mutationFn: async () => {
-            if (!paymentModal.userId || !paymentModal.week || !settings) return;
-            return pemasukanApi.store({
-                user_id: paymentModal.userId,
-                bulan: parseInt(selectedMonth),
-                tahun: parseInt(selectedYear),
-                minggu_ke: paymentModal.week,
-                nominal: settings.weeklyFee, // Pay full weekly amount
-            });
+            if (!paymentModal.userId) return;
+            // If week is null, it's a bulk payment
+            if (paymentModal.week === null) {
+                return pemasukanApi.bulkStore({
+                    user_id: paymentModal.userId,
+                    bulan: parseInt(selectedMonth),
+                    tahun: parseInt(selectedYear),
+                });
+            } else {
+                // Single week payment
+                if (!settings) return;
+                return pemasukanApi.store({
+                    user_id: paymentModal.userId,
+                    bulan: parseInt(selectedMonth),
+                    tahun: parseInt(selectedYear),
+                    minggu_ke: paymentModal.week,
+                    nominal: settings.weeklyFee,
+                });
+            }
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['arrears'] });
@@ -89,7 +115,7 @@ export function ArrearsScreen() {
             setSuccessModal(true);
         },
         onError: (error: any) => {
-            alert("Gagal memproses pembayaran: " + (error.message || "Unknown error"));
+            setErrorModal({ isOpen: true, message: "Gagal memproses pembayaran: " + (error.message || "Unknown error") });
             setPaymentModal(prev => ({ ...prev, open: false }));
         }
     });
@@ -105,9 +131,24 @@ export function ArrearsScreen() {
                 week
             });
         } else {
-            alert("Data user tidak ditemukan untuk mahasiswa ini.");
+            setErrorModal({ isOpen: true, message: "Data user tidak ditemukan untuk mahasiswa ini." });
         }
     };
+
+    const handleBulkPay = (student: { nim: string, name?: string, nama?: string }) => {
+        const user = users?.find(u => u.nim === student.nim);
+        if (user) {
+            setPaymentModal({
+                open: true,
+                studentName: student.name || student.nama || 'Mahasiswa',
+                studentNim: student.nim,
+                userId: user.id,
+                week: null // Indicates bulk payment
+            });
+        } else {
+            setErrorModal({ isOpen: true, message: "Data user tidak ditemukan untuk mahasiswa ini." });
+        }
+    }
 
     const months = [
         { label: 'Januari', value: '1' }, { label: 'Februari', value: '2' },
@@ -118,11 +159,6 @@ export function ArrearsScreen() {
         { label: 'November', value: '11' }, { label: 'Desember', value: '12' },
     ];
 
-    const years = [
-        { label: '2024', value: '2024' },
-        { label: '2025', value: '2025' },
-        { label: '2026', value: '2026' },
-    ];
 
     return (
         <div className="p-6 bg-background min-h-screen animate-fadeIn pb-32">
@@ -137,18 +173,12 @@ export function ArrearsScreen() {
 
                 {/* Period Filter */}
                 <div className="bg-card p-4 rounded-2xl shadow-sm border border-border">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1">
                         <Select
                             label="Bulan"
                             value={selectedMonth}
                             onChange={(e) => setSelectedMonth(e.target.value)}
                             options={months}
-                        />
-                        <Select
-                            label="Tahun"
-                            value={selectedYear}
-                            onChange={(e) => setSelectedYear(e.target.value)}
-                            options={years}
                         />
                     </div>
                 </div>
@@ -191,9 +221,11 @@ export function ArrearsScreen() {
                                         <span className="text-sm font-black text-rose-600 dark:text-rose-400 block">
                                             Rp {totalDue.toLocaleString('id-ID')}
                                         </span>
-                                        <span className="text-[10px] font-bold text-muted-foreground">
-                                            {missingWeeks.length} Minggu Belum
-                                        </span>
+                                        <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                                            <span className="text-[10px] font-bold text-muted-foreground">
+                                                {missingWeeks.length} Minggu Belum
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -216,6 +248,15 @@ export function ArrearsScreen() {
                                                 </button>
                                             )
                                         })}
+                                        {/* Bulk Pay Button - Placed next to weeks */}
+                                        {missingWeeks.length > 1 && (
+                                            <button
+                                                onClick={() => handleBulkPay(s)}
+                                                className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-3 py-1.5 rounded-lg border border-blue-100 dark:border-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1"
+                                            >
+                                                Bayar Sekaligus
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -240,11 +281,17 @@ export function ArrearsScreen() {
             <Modal
                 isOpen={paymentModal.open}
                 onClose={() => setPaymentModal(prev => ({ ...prev, open: false }))}
-                onConfirm={() => mutation.mutate()}
+                onConfirm={() => bulkMutation.mutate()}
                 title="Konfirmasi Pelunasan"
-                description={paymentModal.userId ? `Tandai iuran Minggu ${paymentModal.week} untuk ${paymentModal.studentName} sebagai lunas?` : ''}
+                description={
+                    paymentModal.userId
+                        ? paymentModal.week === null
+                            ? `Lunasi semua tunggakan (${getMissingWeeks(arrears?.find(s => s.nim === paymentModal.studentNim) || {} as any).length} minggu) untuk ${paymentModal.studentName}?`
+                            : `Tandai iuran Minggu ${paymentModal.week} untuk ${paymentModal.studentName} sebagai lunas?`
+                        : ''
+                }
                 type="confirm"
-                confirmLabel={mutation.isPending ? "Memproses..." : "Ya, Lunas"}
+                confirmLabel={bulkMutation.isPending ? "Memproses..." : "Ya, Lunas"}
             />
 
             {/* Success Modal */}
@@ -254,6 +301,15 @@ export function ArrearsScreen() {
                 title="Berhasil"
                 description="Iuran berhasil dilunasi."
                 type="success"
+            />
+
+            {/* Error Feedback Modal */}
+            <Modal
+                isOpen={errorModal.isOpen}
+                onClose={() => setErrorModal({ ...errorModal, isOpen: false })}
+                title="Gagal"
+                description={errorModal.message}
+                type="error"
             />
         </div>
     );
