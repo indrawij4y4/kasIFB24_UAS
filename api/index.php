@@ -1,20 +1,58 @@
 <?php
 
-use Illuminate\Foundation\Application;
-use Illuminate\Http\Request;
+// Enable maximum error reporting
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+ini_set('log_errors', '1');
 
-define('LARAVEL_START', microtime(true));
+// Wrap everything in try-catch to capture any errors
+try {
+    // Set base path for Vercel
+    $basePath = dirname(__DIR__);
 
-// Set base path for Vercel - api/index.php is one level down
-$basePath = dirname(__DIR__);
+    // Debug: Output base path
+    if (isset($_GET['debug'])) {
+        echo "Base Path: " . $basePath . "\n";
+        echo "Autoload exists: " . (file_exists($basePath . '/vendor/autoload.php') ? 'YES' : 'NO') . "\n";
+        echo "Bootstrap exists: " . (file_exists($basePath . '/bootstrap/app.php') ? 'YES' : 'NO') . "\n";
+        echo "PHP Version: " . PHP_VERSION . "\n";
+        exit;
+    }
 
-// Skip maintenance mode check for serverless (no writable storage)
+    // Check if autoload exists
+    $autoloadPath = $basePath . '/vendor/autoload.php';
+    if (!file_exists($autoloadPath)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Autoload not found', 'path' => $autoloadPath]);
+        exit;
+    }
 
-// Register the Composer autoloader...
-require $basePath . '/vendor/autoload.php';
+    define('LARAVEL_START', microtime(true));
 
-// Bootstrap Laravel and handle the request...
-/** @var Application $app */
-$app = require_once $basePath . '/bootstrap/app.php';
+    // Register the Composer autoloader
+    require $autoloadPath;
 
-$app->handleRequest(Request::capture());
+    // Check if bootstrap exists
+    $bootstrapPath = $basePath . '/bootstrap/app.php';
+    if (!file_exists($bootstrapPath)) {
+        http_response_code(500);
+        echo json_encode(['error' => 'Bootstrap not found', 'path' => $bootstrapPath]);
+        exit;
+    }
+
+    // Bootstrap Laravel
+    $app = require_once $bootstrapPath;
+
+    // Handle request
+    $app->handleRequest(\Illuminate\Http\Request::capture());
+
+} catch (\Throwable $e) {
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'error' => $e->getMessage(),
+        'file' => $e->getFile(),
+        'line' => $e->getLine(),
+        'trace' => $e->getTraceAsString()
+    ]);
+}
