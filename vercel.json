@@ -17,7 +17,10 @@
         "APP_ENV": "production",
         "APP_DEBUG": "true",
         "APP_URL": "https://${VERCEL_URL}",
-        "VITE_APP_URL": "https://${VERCEL_URL}"
+        "VITE_APP_URL": "https://${VERCEL_URL}",
+        "LOG_CHANNEL": "stderr",
+        "SESSION_DRIVER": "cookie",
+        "CACHE_DRIVER": "array"
     },
     "outputDirectory": "public"
 }

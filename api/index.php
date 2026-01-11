@@ -3,28 +3,75 @@
 // Enable maximum error reporting
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
-ini_set('log_errors', '1');
+
+// Set base path for Vercel
+$basePath = dirname(__DIR__);
+
+// Vercel serverless: Create writable directories in /tmp BEFORE loading Laravel
+if (getenv('VERCEL') || isset($_ENV['VERCEL'])) {
+    $tmpBase = '/tmp';
+
+    // Create all required directories
+    $dirs = [
+        $tmpBase . '/storage',
+        $tmpBase . '/storage/app',
+        $tmpBase . '/storage/app/public',
+        $tmpBase . '/storage/framework',
+        $tmpBase . '/storage/framework/cache',
+        $tmpBase . '/storage/framework/sessions',
+        $tmpBase . '/storage/framework/views',
+        $tmpBase . '/storage/logs',
+        $tmpBase . '/bootstrap/cache',
+    ];
+
+    foreach ($dirs as $dir) {
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+    }
+
+    // Set environment variables to override Laravel paths
+    putenv('APP_STORAGE_PATH=' . $tmpBase . '/storage');
+    $_ENV['APP_STORAGE_PATH'] = $tmpBase . '/storage';
+
+    // Also need to handle bootstrap/cache - symlink or copy
+    $bootstrapCacheSource = $basePath . '/bootstrap/cache';
+    $bootstrapCacheTmp = $tmpBase . '/bootstrap/cache';
+
+    // Copy any existing cache files
+    if (is_dir($bootstrapCacheSource)) {
+        $files = glob($bootstrapCacheSource . '/*.php');
+        foreach ($files as $file) {
+            $dest = $bootstrapCacheTmp . '/' . basename($file);
+            if (!file_exists($dest)) {
+                @copy($file, $dest);
+            }
+        }
+    }
+}
 
 // Wrap everything in try-catch to capture any errors
 try {
-    // Set base path for Vercel
-    $basePath = dirname(__DIR__);
-
-    // Debug: Output base path
+    // Debug endpoint
     if (isset($_GET['debug'])) {
-        echo "Base Path: " . $basePath . "\n";
-        echo "Autoload exists: " . (file_exists($basePath . '/vendor/autoload.php') ? 'YES' : 'NO') . "\n";
-        echo "Bootstrap exists: " . (file_exists($basePath . '/bootstrap/app.php') ? 'YES' : 'NO') . "\n";
-        echo "PHP Version: " . PHP_VERSION . "\n";
+        header('Content-Type: application/json');
+        echo json_encode([
+            'base_path' => $basePath,
+            'autoload_exists' => file_exists($basePath . '/vendor/autoload.php'),
+            'bootstrap_exists' => file_exists($basePath . '/bootstrap/app.php'),
+            'php_version' => PHP_VERSION,
+            'vercel' => getenv('VERCEL') ?: 'not set',
+            'tmp_storage_exists' => is_dir('/tmp/storage'),
+            'tmp_storage_writable' => is_writable('/tmp/storage'),
+            'tmp_bootstrap_cache_exists' => is_dir('/tmp/bootstrap/cache'),
+        ], JSON_PRETTY_PRINT);
         exit;
     }
 
-    // Check if autoload exists
+    // Check autoload
     $autoloadPath = $basePath . '/vendor/autoload.php';
     if (!file_exists($autoloadPath)) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Autoload not found', 'path' => $autoloadPath]);
-        exit;
+        throw new Exception('Autoload not found: ' . $autoloadPath);
     }
 
     define('LARAVEL_START', microtime(true));
@@ -32,16 +79,13 @@ try {
     // Register the Composer autoloader
     require $autoloadPath;
 
-    // Check if bootstrap exists
-    $bootstrapPath = $basePath . '/bootstrap/app.php';
-    if (!file_exists($bootstrapPath)) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Bootstrap not found', 'path' => $bootstrapPath]);
-        exit;
-    }
-
     // Bootstrap Laravel
-    $app = require_once $bootstrapPath;
+    $app = require_once $basePath . '/bootstrap/app.php';
+
+    // Override storage path for Vercel
+    if (getenv('VERCEL') || isset($_ENV['VERCEL'])) {
+        $app->useStoragePath('/tmp/storage');
+    }
 
     // Handle request
     $app->handleRequest(\Illuminate\Http\Request::capture());
@@ -53,6 +97,6 @@ try {
         'error' => $e->getMessage(),
         'file' => $e->getFile(),
         'line' => $e->getLine(),
-        'trace' => $e->getTraceAsString()
-    ]);
+        'trace' => explode("\n", $e->getTraceAsString())
+    ], JSON_PRETTY_PRINT);
 }
