@@ -13,8 +13,9 @@
         }
     ],
     "env": {
+        "VERCEL": "1",
         "APP_ENV": "production",
-        "APP_DEBUG": "false",
+        "APP_DEBUG": "true",
         "APP_URL": "https://${VERCEL_URL}",
         "VITE_APP_URL": "https://${VERCEL_URL}"
     },
