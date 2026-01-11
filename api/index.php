@@ -82,6 +82,39 @@ try {
         exit;
     }
 
+    // Database Connection Test Endpoint
+    if (isset($_GET['db_test'])) {
+        header('Content-Type: application/json');
+        require $basePath . '/vendor/autoload.php';
+        $app = require_once $basePath . '/bootstrap/app.php';
+
+        if (getenv('VERCEL') || isset($_ENV['VERCEL'])) {
+            $app->useStoragePath('/tmp/storage');
+        }
+
+        $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+        try {
+            $pdo = \Illuminate\Support\Facades\DB::connection()->getPdo();
+            $userCount = \App\Models\User::count();
+            echo json_encode([
+                'status' => 'connected',
+                'database' => env('DB_DATABASE'),
+                'host' => env('DB_HOST'),
+                'user_count' => $userCount,
+                'ssl_mode' => env('DB_SSL_MODE'),
+            ]);
+        } catch (\Exception $e) {
+            echo json_encode([
+                'status' => 'error',
+                'message' => $e->getMessage(),
+                'database' => env('DB_DATABASE'),
+                'host' => env('DB_HOST'),
+            ]);
+        }
+        exit;
+    }
+
     // Debug endpoint
     if (isset($_GET['debug'])) {
         header('Content-Type: application/json');
