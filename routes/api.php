@@ -30,7 +30,7 @@ Route::get('/test', function () {
     ]);
 });
 
-Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/auth/login', [AuthController::class, 'login'])->name('login');
 
 // Export routes - use token-query middleware for browser file downloads
 Route::middleware(AuthenticateWithTokenQuery::class)->group(function () {
