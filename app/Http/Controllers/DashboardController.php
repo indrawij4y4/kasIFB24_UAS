@@ -57,8 +57,9 @@ class DashboardController extends Controller
 
                 // Check each week
                 for ($week = 1; $week <= $weeksPerMonth; $week++) {
-                    $weekPayment = $payments->where('minggu_ke', $week)->first();
-                    if (!$weekPayment || $weekPayment->nominal < $weeklyFee) {
+                    // Check total paid for this week, handling multiple records
+                    $weekPaid = $payments->where('minggu_ke', $week)->sum('nominal');
+                    if ($weekPaid < $weeklyFee) {
                         $arrearsCount++;
                         break; // Count user once even if multiple weeks unpaid
                     }
