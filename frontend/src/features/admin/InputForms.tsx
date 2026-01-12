@@ -145,9 +145,20 @@ export function InputInScreen() {
         },
     });
 
+    // Check if month is configured
+    const isConfigured = settings?.is_configured !== false; // Default to true if undefined (loading/checked later)
+
     const handleSave = () => {
         if (!selectedUser || !nominal) {
             setErrorModal({ open: true, message: 'Lengkapi semua field!' });
+            return;
+        }
+
+        if (settings?.is_configured === false) {
+            setErrorModal({
+                open: true,
+                message: 'Bulan ini belum dikonfigurasi oleh Admin. Silakan hubungi admin untuk melakukan konfigurasi keuangan di menu Pengaturan.'
+            });
             return;
         }
 
@@ -197,6 +208,13 @@ export function InputInScreen() {
                 <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
             ) : (
                 <div className="bg-card p-6 rounded-3xl shadow-sm space-y-4 border border-border">
+                    {/* Warning if month not configured */}
+                    {settings?.is_configured === false && (
+                        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-600 p-4 rounded-xl text-sm font-medium flex items-center gap-2">
+                            <span>⚠️ Bulan ini belum dikonfigurasi. Tidak dapat menginput data.</span>
+                        </div>
+                    )}
+
                     <Select
                         label="Nama Mahasiswa"
                         value={selectedUser}
@@ -216,7 +234,7 @@ export function InputInScreen() {
                             value={selectedWeek}
                             onChange={(e) => setSelectedWeek(e.target.value)}
                             options={weekOptions.length > 0 ? weekOptions : [{ label: 'Lunas Semua', value: '-' }]}
-                            disabled={weekOptions.length === 0}
+                            disabled={weekOptions.length === 0 || !isConfigured}
                         />
                     </div>
 
@@ -227,6 +245,7 @@ export function InputInScreen() {
                         value={formatNumber(nominal)}
                         onChange={(e) => setNominal(parseNumber(e.target.value))}
                         placeholder="10.000"
+                        disabled={!isConfigured}
                     />
 
                     <Button
@@ -234,6 +253,7 @@ export function InputInScreen() {
                         variant="success"
                         className="w-full"
                         isLoading={mutation.isPending}
+                        disabled={!isConfigured}
                     >
                         Simpan Iuran
                     </Button>
