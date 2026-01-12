@@ -5,11 +5,27 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 
 // Handle CORS preflight requests BEFORE loading Laravel
+// Handle CORS preflight requests BEFORE loading Laravel
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    header('Access-Control-Allow-Origin: https://indrawij4y4.github.io');
+    $allowedOrigins = [
+        'https://indrawij4y4.github.io',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173'
+    ];
+
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+
+    if (in_array($origin, $allowedOrigins)) {
+        header("Access-Control-Allow-Origin: $origin");
+        header('Access-Control-Allow-Credentials: true');
+    } else {
+        // Default for safety, or you could allow * for public API if credentials not needed
+        // But since we use tokens, let's keep it safe.
+        // If origin is not in list, we don't send Allow-Origin, which fails CORS correctly.
+    }
+
     header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept, X-Requested-With');
-    header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, Accept, X-Requested-With, X-XSRF-TOKEN');
     header('Access-Control-Max-Age: 86400');
     http_response_code(204);
     exit;
