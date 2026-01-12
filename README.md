@@ -1,6 +1,6 @@
 # 💰 Kas IFB24
 
-Platform pencatatan dan monitoring kas kelas yang akurat, transparan, dan dapat diakses oleh seluruh anggota kelas IFB24
+Platform pencatatan dan monitoring kas kelas yang akurat, transparan, dan dapat diakses oleh seluruh anggota kelas IFB24 
 
 
 ![Laravel](https://img.shields.io/badge/Laravel-12-FF2D20?style=flat&logo=laravel&logoColor=white)
@@ -126,11 +126,7 @@ Lihat dokumentasi API lengkap di bagian bawah file ini atau di [api.php](routes/
 | GET | `/api/arrears` | Arrears list |
 | GET | `/api/leaderboard` | Top contributors |
 
-## 👥 Contributors
-
-- **Indra Wijaya** - 240602036 (Admin)
-- **Hanniati Dwi Lestari** - 240602035 (Admin)
 
 ## 📄 License
 
-This project is created for educational purposes - Kelas IFB24.
+Projek ini di buat untuk memenuhi tugas UAS pemrograman lanjutan.
