@@ -85,7 +85,11 @@ export function InputInScreen() {
 
         // Check m1, m2, m3, m4, m5
         const key = `m${week}`;
-        return (student[key] || 0) > 0;
+        const amountPaid = student[key] || 0;
+        const fee = settings?.weeklyFee || 0;
+
+        // It is paid ONLY if amount met the fee (and fee is configured)
+        return fee > 0 && amountPaid >= fee;
     };
 
     // Filter available weeks
@@ -124,17 +128,30 @@ export function InputInScreen() {
         }
     }, [weekOptions, selectedWeek]); // Runs when options calculation changes
 
-    // 2. Handle Nominal Default from Settings
+    // 2. Handle Nominal Default (Smart Logic)
     useEffect(() => {
-        if (settings?.weeklyFee !== undefined) {
-            // Only update if we haven't applied this month/year config yet
-            // This ensures we don't overwrite user changes if they just type
-            if (lastConfigRef.current?.m !== selectedMonth || lastConfigRef.current?.y !== selectedYear) {
-                setNominal(settings.weeklyFee.toString());
-                lastConfigRef.current = { m: selectedMonth, y: selectedYear };
+        if (settings?.weeklyFee !== undefined && selectedWeek !== '-' && selectedUser) {
+            const fee = settings.weeklyFee;
+
+            // Check if partal payment exists for selected week
+            let remaining = fee;
+            if (studentsData) {
+                const student = studentsData.find((s: any) => s.id.toString() === selectedUser);
+                if (student) {
+                    const key = `m${selectedWeek}`;
+                    const paid = student[key] || 0;
+                    if (paid > 0) {
+                        remaining = fee - paid;
+                        if (remaining < 0) remaining = 0;
+                    }
+                }
             }
+
+            // Only update if we haven't applied this month/year config yet OR if context changes
+            // "Smart Logic" preference: Always suggest remaining amount when context changes.
+            setNominal(remaining.toString());
         }
-    }, [settings, selectedMonth, selectedYear]); // Depend on settings object and context
+    }, [settings, selectedMonth, selectedYear, selectedWeek, selectedUser, studentsData]); // Depend on context
 
     // Mutation for saving pemasukan
     const mutation = useMutation({
