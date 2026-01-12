@@ -70,17 +70,20 @@ class PemasukanController extends Controller
 
 
         $matrix = $users->map(function ($user) {
-            $payments = $user->pemasukan->keyBy('minggu_ke');
+            // Group by minggu_ke and sum amounts to handle multiple payments per week
+            $payments = $user->pemasukan->groupBy('minggu_ke')->map(function ($group) {
+                return $group->sum('nominal');
+            });
 
             $data = [
                 'id' => $user->id,
                 'nim' => $user->nim,
                 'nama' => $user->nama,
-                'm1' => (float) ($payments->get(1)?->nominal ?? 0),
-                'm2' => (float) ($payments->get(2)?->nominal ?? 0),
-                'm3' => (float) ($payments->get(3)?->nominal ?? 0),
-                'm4' => (float) ($payments->get(4)?->nominal ?? 0),
-                'm5' => (float) ($payments->get(5)?->nominal ?? 0),
+                'm1' => (float) ($payments->get(1) ?? 0),
+                'm2' => (float) ($payments->get(2) ?? 0),
+                'm3' => (float) ($payments->get(3) ?? 0),
+                'm4' => (float) ($payments->get(4) ?? 0),
+                'm5' => (float) ($payments->get(5) ?? 0),
             ];
 
             return $data;
@@ -88,26 +91,7 @@ class PemasukanController extends Controller
 
         return response()->json($matrix);
     }
-
-    /**
-     * Get personal payment history for logged-in user
-     */
-    public function myPayments(Request $request)
-    {
-        $user = $request->user();
-
-        $payments = Pemasukan::where('user_id', $user->id)
-            ->orderBy('tahun', 'desc')
-            ->orderBy('bulan', 'desc')
-            ->orderBy('minggu_ke', 'asc')
-            ->get();
-
-        return response()->json($payments);
-    }
-
-    /**
-     * Store a new payment (Admin only)
-     */
+    // ...
     public function store(Request $request)
     {
         $request->validate([
@@ -118,38 +102,8 @@ class PemasukanController extends Controller
             'nominal' => 'required|numeric|min:0',
         ]);
 
-        // Check for existing payment
-        $existing = Pemasukan::where('user_id', $request->user_id)
-            ->where('bulan', $request->bulan)
-            ->where('tahun', $request->tahun)
-            ->where('minggu_ke', $request->minggu_ke)
-            ->first();
-
-        if ($existing) {
-            // Check if existing payment is partial (less than new nominal)
-            if ((float) $existing->nominal < (float) $request->nominal) {
-                $existing->update([
-                    'nominal' => $request->nominal
-                ]);
-
-                // Invalidate caches
-                Cache::forget('dashboard_stats');
-                $bulanInt = (int) $request->bulan;
-                $tahunInt = (int) $request->tahun;
-                Cache::forget("arrears_list_{$bulanInt}_{$tahunInt}");
-
-                return response()->json([
-                    'message' => 'Pembayaran berhasil diperbarui (pelunasan).',
-                    'data' => $existing,
-                ], 200);
-            }
-
-            // Idempotency check: If record exists and is fully paid, treat as success
-            return response()->json([
-                'message' => 'Pembayaran sudah tercatat sebelumnya.',
-                'data' => $existing,
-            ], 200);
-        }
+        // Removed existing check to allow multiple payments (Top-up) logic
+        // The matrix and stats will sum them up.
 
         $pemasukan = Pemasukan::create([
             'user_id' => $request->user_id,
