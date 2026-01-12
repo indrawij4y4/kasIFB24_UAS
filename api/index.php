@@ -9,6 +9,7 @@ ini_set('display_errors', '1');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     $allowedOrigins = [
         'https://indrawij4y4.github.io',
+        'https://www.indrawij4y4.github.io',
         'http://localhost:5173',
         'http://127.0.0.1:5173'
     ];
