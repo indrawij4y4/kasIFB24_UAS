@@ -3,29 +3,38 @@ import react from '@vitejs/plugin-react'
 import viteCompression from 'vite-plugin-compression';
 
 // https://vite.dev/config/
-export default defineConfig({
-  base: '/KasIFB24_UAS/', // GitHub Pages base path
-  plugins: [
-    react(),
-    viteCompression()
-  ],
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['lucide-react', 'framer-motion', 'clsx', 'tailwind-merge']
+// https://vite.dev/config/
+export default defineConfig(({ mode }) => {
+  return {
+    base: '/KasIFB24_UAS/', // GitHub Pages base path
+    plugins: [
+      react(),
+      viteCompression()
+    ],
+    define: {
+      // Force local proxy usage in development to avoid CORS/Cookie issues
+      ...(mode === 'development' ? {
+        'import.meta.env.VITE_API_URL': JSON.stringify('/api')
+      } : {})
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+            ui: ['lucide-react', 'framer-motion', 'clsx', 'tailwind-merge']
+          }
+        }
+      }
+    },
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:8000',
+          changeOrigin: true,
+          secure: false,
         }
       }
     }
-  },
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-        secure: false,
-      }
-    }
-  }
+  };
 })
